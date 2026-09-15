@@ -1,8 +1,8 @@
-import type { ClientHistory } from '@/features/chat/data/client-history';
 import type { ChatService, Outbox } from '@/features/chat/model/contracts';
 import { DeliveryError } from '@/features/chat/model/delivery-error';
+import { createSerialQueue } from '@/shared/async/serial-queue';
 
-import type { createAcceptedMessages } from './accepted-messages';
+import type { MockChatServer, SimulationSettings } from './contracts';
 
 interface SimulationState {
   offline: boolean;
@@ -14,12 +14,12 @@ interface SimulationState {
 
 export async function createChatSimulation(
   outbox: Outbox,
-  server: Awaited<ReturnType<typeof createAcceptedMessages>>,
+  server: MockChatServer,
   createId: () => string,
-  history: ClientHistory,
+  history: SimulationSettings,
 ) {
   const saved = await history.getSettings();
-  let work: Promise<unknown> = Promise.resolve();
+  const exclusive = createSerialQueue();
   let state: SimulationState = {
     offline: saved.offline,
     failSave: false,
@@ -28,14 +28,6 @@ export async function createChatSimulation(
     loseResponse: false,
   };
   const listeners = new Set<() => void>();
-
-  function exclusive<T>(action: () => Promise<T>): Promise<T> {
-    const result = work.then(action);
-
-    work = result.catch(() => undefined);
-
-    return result;
-  }
 
   function update(patch: Partial<SimulationState>) {
     state = { ...state, ...patch };
@@ -73,7 +65,9 @@ export async function createChatSimulation(
 
       const loseResponse = state.loseResponse;
 
-      update({ loseResponse: false });
+      if (loseResponse) {
+        update({ loseResponse: false });
+      }
 
       const accepted = await server.accept(message);
 

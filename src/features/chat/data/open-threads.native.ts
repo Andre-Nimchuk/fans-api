@@ -28,7 +28,7 @@ async function initialize() {
 
   try {
     for (const conversation of conversations) {
-      // Fixed mock conversations each own a client/server pair; IDs cannot leak across threads.
+      // Each conversation owns its queue, cache and mock server files.
       const client = await openDatabase(`chat-${conversation.id}-client.db`);
 
       opened.push(client);
@@ -45,13 +45,15 @@ async function initialize() {
       const outbox = await createOutbox(client);
       const server = await createAcceptedMessages(serverDb);
 
-      for (const message of seedMessages(conversation.id)) {
+      const baseline = seedMessages(conversation.id);
+
+      for (const message of baseline) {
         await server.accept(message, message.sender);
       }
 
       stores.set(
         conversation.id,
-        await createChatSession(outbox, server, randomUUID, history, seedMessages(conversation.id)),
+        await createChatSession(outbox, server, randomUUID, history, baseline),
       );
     }
 

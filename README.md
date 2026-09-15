@@ -31,7 +31,7 @@ yarn test:watch  # Tests during development
 yarn format     # Apply formatting
 ```
 
-**22 storage/recovery tests** against real SQLite files: restart persistence, retry deduplication, ordering/pagination, conflicting IDs, write failure, schema recovery and offline reconciliation. Earlier iOS interaction checks cover the keyboard, four-line input limit, sending and separate drafts; the new recovery controls still need the recorded device walkthrough. Node 22 reports an experimental SQLite warning during tests.
+**24 storage/recovery tests** against real SQLite files: restart persistence, retry deduplication, ordering/pagination, conflicting IDs, write failure, schema recovery, offline reconciliation, retry write errors and stable UI row identity. Earlier iOS interaction checks cover the keyboard, four-line input limit, sending and separate drafts; the new recovery controls still need the recorded device walkthrough. Node 22 reports an experimental SQLite warning during tests.
 
 ## Try the failure scenarios
 
@@ -53,7 +53,7 @@ Faults fire once; tap an armed fault again to cancel it. This is simulated conne
 - Each conversation has separate SQLite files for its queue, received-history cache/settings and mock server history. Enqueue/accept returns only after persistence; retry with the same client ID returns the original accepted message.
 - Cache writes precede cursor advancement and queue cleanup; replay after interruption is idempotent. Reset is serialized with delivery and has a durable completion marker.
 - The mock assigns final order; pending messages retain local order. History loads in pages of 30; the inverted list anchors the latest messages and offers a return button when reading older history.
-- `src/features/chat/` owns chat rules, `src/services/mock/` owns mock acceptance, and `src/shared/storage/` owns database access. `tests/` verifies these boundaries. Styles use [NativeWind 4.2.7](https://www.nativewind.dev/docs/getting-started/installation) with shared Tailwind colors.
+- `src/features/chat/model/` separates delivery coordination (`thread-store`) from message identity/order (`thread-messages`); `data/` wires persistence, `hooks/` handles interactions, and `components/` renders UI. `src/services/mock/` owns mock acceptance, and `src/shared/storage/` owns database access. `tests/` verifies these boundaries. Styles use [NativeWind 4.2.7](https://www.nativewind.dev/docs/getting-started/installation) with shared Tailwind colors.
 
 ## Remaining work
 

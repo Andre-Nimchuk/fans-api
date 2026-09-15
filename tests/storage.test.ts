@@ -1,11 +1,9 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import type { TestContext } from 'node:test';
 
-import { openNodeDatabase } from './helpers/node-database';
+import { createDatabaseFiles } from './helpers/database-files';
 import { createClientHistory } from '../src/features/chat/data/client-history';
 import { createChatSession } from '../src/features/chat/data/create-chat-session';
 import { CLIENT_DATABASE, createOutbox } from '../src/features/chat/data/outbox';
@@ -15,41 +13,12 @@ import {
   createAcceptedMessages,
   MOCK_SERVER_DATABASE,
 } from '../src/services/mock/chat/accepted-messages';
-import type { Database } from '../src/shared/storage/database';
 import { initializeDatabase } from '../src/shared/storage/database';
 
 const message: SendMessage = { clientId: 'send-1', text: "Hello 👋 'quoted'", createdAt: 100 };
 
-async function fixture(t: TestContext) {
-  const directory = await mkdtemp(join(tmpdir(), 'fan-chat-test-'));
-  const connections = new Set<Database>();
-
-  t.after(async () => {
-    for (const db of connections) {
-      await db.close();
-    }
-
-    await rm(directory, { recursive: true, force: true });
-  });
-
-  return {
-    open(name: string) {
-      const db = openNodeDatabase(join(directory, name));
-
-      connections.add(db);
-
-      return db;
-    },
-    async close(db: Database) {
-      await db.close();
-      connections.delete(db);
-    },
-    directory,
-  };
-}
-
 test('three queued messages retain IDs, text and local order after closing and reopening SQLite', async (t) => {
-  const files = await fixture(t);
+  const files = await createDatabaseFiles(t);
   const db = files.open(CLIENT_DATABASE);
   const outbox = await createOutbox(db);
 
@@ -72,7 +41,7 @@ test('three queued messages retain IDs, text and local order after closing and r
 });
 
 test('repeated enqueue preserves one record and the original local order', async (t) => {
-  const files = await fixture(t);
+  const files = await createDatabaseFiles(t);
   const outbox = await createOutbox(files.open(CLIENT_DATABASE));
   const first = await outbox.enqueue(message);
 
@@ -81,7 +50,7 @@ test('repeated enqueue preserves one record and the original local order', async
 });
 
 test('accepted ID survives server restart independently of deleting the client database', async (t) => {
-  const files = await fixture(t);
+  const files = await createDatabaseFiles(t);
   const clientDb = files.open(CLIENT_DATABASE);
   const serverDb = files.open(MOCK_SERVER_DATABASE);
   const outbox = await createOutbox(clientDb);
@@ -103,7 +72,7 @@ test('accepted ID survives server restart independently of deleting the client d
 });
 
 test('concurrent acceptance from separate connections yields one server record', async (t) => {
-  const files = await fixture(t);
+  const files = await createDatabaseFiles(t);
   const first = await createAcceptedMessages(files.open(MOCK_SERVER_DATABASE));
   const second = await createAcceptedMessages(files.open(MOCK_SERVER_DATABASE));
   const results = await Promise.all([first.accept(message), second.accept(message)]);
@@ -113,7 +82,7 @@ test('concurrent acceptance from separate connections yields one server record',
 });
 
 test('different IDs with the same text remain distinct and page by server order', async (t) => {
-  const files = await fixture(t);
+  const files = await createDatabaseFiles(t);
   const server = await createAcceptedMessages(files.open(MOCK_SERVER_DATABASE));
   const first = await server.accept(message);
   const second = await server.accept({ ...message, clientId: 'send-2', createdAt: 1 });
@@ -124,7 +93,7 @@ test('different IDs with the same text remain distinct and page by server order'
 });
 
 test('reusing an ID with changed content fails without overwriting the stored message', async (t) => {
-  const files = await fixture(t);
+  const files = await createDatabaseFiles(t);
   const outbox = await createOutbox(files.open(CLIENT_DATABASE));
   const server = await createAcceptedMessages(files.open(MOCK_SERVER_DATABASE));
   const pending = await outbox.enqueue(message);
@@ -138,7 +107,7 @@ test('reusing an ID with changed content fails without overwriting the stored me
 });
 
 test('a SQLite write failure rejects enqueue and leaves existing text intact', async (t) => {
-  const files = await fixture(t);
+  const files = await createDatabaseFiles(t);
   const db = files.open(CLIENT_DATABASE);
   const outbox = await createOutbox(db);
   const pending = await outbox.enqueue(message);
@@ -149,7 +118,7 @@ test('a SQLite write failure rejects enqueue and leaves existing text intact', a
 });
 
 test('failed schema initialization rolls back and a newer schema is never silently reset', async (t) => {
-  const files = await fixture(t);
+  const files = await createDatabaseFiles(t);
   const db = files.open(CLIENT_DATABASE);
 
   await assert.rejects(initializeDatabase(db, 'CREATE TABLE partial (id INTEGER); INVALID SQL;'));
@@ -161,7 +130,7 @@ test('failed schema initialization rolls back and a newer schema is never silent
 });
 
 test('acceptance migration preserves v1 history and adds incoming sender identity', async (t) => {
-  const files = await fixture(t);
+  const files = await createDatabaseFiles(t);
   const db = files.open(MOCK_SERVER_DATABASE);
 
   await db.exec(`CREATE TABLE accepted_messages (
@@ -184,7 +153,7 @@ test('acceptance migration preserves v1 history and adds incoming sender identit
 });
 
 test('thread pages older history without duplicates and keeps conversation stores independent', async (t) => {
-  const files = await fixture(t);
+  const files = await createDatabaseFiles(t);
   const server = await createAcceptedMessages(files.open('first-server.db'));
   const outbox = await createOutbox(files.open('first-client.db'));
 
@@ -223,7 +192,7 @@ test('thread pages older history without duplicates and keeps conversation store
 });
 
 test('thread exposes a saved failure, retries it and survives reopening without another copy', async (t) => {
-  const files = await fixture(t);
+  const files = await createDatabaseFiles(t);
   const clientDb = files.open(CLIENT_DATABASE);
   const serverDb = files.open(MOCK_SERVER_DATABASE);
   const outbox = await createOutbox(clientDb);
@@ -269,7 +238,7 @@ test(
   'scenario faults fire once: failed save is not queued, failed delivery needs explicit retry',
   { timeout: 3000 },
   async (t) => {
-    const files = await fixture(t);
+    const files = await createDatabaseFiles(t);
     const outbox = await createOutbox(files.open(CLIENT_DATABASE));
     const server = await createAcceptedMessages(files.open(MOCK_SERVER_DATABASE));
     const thread = await createChatSession(
@@ -320,7 +289,7 @@ test(
 );
 
 test('offline scenario recovers four incoming before three queued sends in server order without duplicates', async (t) => {
-  const files = await fixture(t);
+  const files = await createDatabaseFiles(t);
   const outbox = await createOutbox(files.open(CLIENT_DATABASE));
   const server = await createAcceptedMessages(files.open(MOCK_SERVER_DATABASE));
   let incomingId = 0;

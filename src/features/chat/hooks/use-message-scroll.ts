@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FlatList, NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
 
-import type { ThreadMessage } from '../model/thread-store';
+import type { ThreadMessage } from '../model/thread-messages';
 
 export function useMessageScroll(jumpRequest: number) {
   const list = useRef<FlatList<ThreadMessage>>(null);

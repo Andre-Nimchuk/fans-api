@@ -1,4 +1,4 @@
-import type { createAcceptedMessages } from '@/services/mock/chat/accepted-messages';
+import type { MockChatServer } from '@/services/mock/chat/contracts';
 import { createChatSimulation } from '@/services/mock/chat/simulation';
 
 import type { ClientHistory } from './client-history';
@@ -8,7 +8,7 @@ import { createThreadStore } from '../model/thread-store';
 
 export async function createChatSession(
   outbox: Outbox,
-  server: Awaited<ReturnType<typeof createAcceptedMessages>>,
+  server: MockChatServer,
   createId: () => string,
   history: ClientHistory,
   baseline: (SendMessage & { sender: AcceptedMessage['sender'] })[] = [],

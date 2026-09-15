@@ -1,10 +1,10 @@
+import { createSerialQueue } from '@/shared/async/serial-queue';
+
 import type { ChatService, MessageHistory, Outbox } from './contracts';
 import { DeliveryError } from './delivery-error';
-import type { AcceptedMessage, PendingMessage, SendMessage } from './message';
-
-export type ThreadMessage =
-  | (AcceptedMessage & { status: 'sent' })
-  | (PendingMessage & { sender: 'self'; status: 'waiting' | 'failed' | 'unknown' });
+import type { AcceptedMessage, SendMessage } from './message';
+import { createThreadMessages } from './thread-messages';
+import type { ThreadMessage } from './thread-messages';
 
 export interface ThreadSnapshot {
   messages: ThreadMessage[];
@@ -23,10 +23,10 @@ export async function createThreadStore(
   history: MessageHistory,
   isOnline = () => true,
 ) {
-  let confirmed: AcceptedMessage[] = [];
-  let pending: PendingMessage[] = [];
+  const messages = createThreadMessages();
   const listeners = new Set<() => void>();
-  let work: Promise<unknown> = Promise.resolve();
+  // Delivery, reconciliation and reset share one queue; old work cannot finish after reset.
+  const schedule = createSerialQueue();
   let syncing: Promise<void> | undefined;
   let resetting = false;
   let resetRequired = false;
@@ -38,31 +38,9 @@ export async function createThreadStore(
   let error: string | null = null;
   let snapshot: ThreadSnapshot;
 
-  // All delivery, reconciliation and reset writes share one worker; old work cannot finish after reset.
-  function schedule<T>(task: () => Promise<T>): Promise<T> {
-    const result = work.then(task);
-
-    work = result.catch(() => undefined);
-
-    return result;
-  }
-
   function publish() {
-    const acceptedIds = new Set(confirmed.map((message) => message.clientId));
-
     snapshot = {
-      messages: [
-        ...pending
-          .filter((message) => !acceptedIds.has(message.clientId))
-          .slice()
-          .reverse()
-          .map((message): ThreadMessage => ({
-            ...message,
-            sender: 'self',
-            status: message.failure ?? 'waiting',
-          })),
-        ...confirmed.map((message): ThreadMessage => ({ ...message, status: 'sent' })),
-      ],
+      messages: messages.getSnapshot(),
       hasOlder,
       loadingOlder,
       resetting: resetting || resetRequired,
@@ -74,24 +52,6 @@ export async function createThreadStore(
     }
   }
 
-  function merge(messages: AcceptedMessage[]) {
-    const byId = new Map(confirmed.map((message) => [message.clientId, message]));
-    let changed = false;
-
-    for (const message of messages) {
-      if (!byId.has(message.clientId)) {
-        byId.set(message.clientId, message);
-        changed = true;
-      }
-    }
-
-    if (changed) {
-      confirmed = [...byId.values()].sort((a, b) => b.serverSequence - a.serverSequence);
-    }
-
-    return changed;
-  }
-
   async function initialize() {
     syncCursor = (await history.getSettings()).cursor;
     if (syncCursor < 0 && isOnline()) {
@@ -101,36 +61,40 @@ export async function createThreadStore(
       await history.save(page, syncCursor);
     }
 
-    confirmed = await history.getBefore(undefined, PAGE_SIZE);
-    pending = await outbox.list();
+    const confirmed = await history.getBefore(undefined, PAGE_SIZE);
+    const pending = await outbox.list();
+
     for (const message of pending) {
       if (await history.find(message.clientId)) {
         await outbox.remove(message.clientId);
       }
     }
 
-    pending = await outbox.list();
+    messages.replace(confirmed, await outbox.list());
     pagingCursor = confirmed[confirmed.length - 1]?.serverSequence;
     hasOlder = confirmed.length === PAGE_SIZE;
     error = null;
   }
 
-  async function acknowledge(messages: AcceptedMessage[], cursor?: number) {
+  async function acknowledge(accepted: AcceptedMessage[], cursor?: number) {
     // REVIEW: Cache first, then remove pending. A crash between the files replays safely by client ID.
-    await history.save(messages, cursor);
-    for (const message of messages) {
-      if (pending.some((row) => row.clientId === message.clientId)) {
+    await history.save(accepted, cursor);
+
+    let changed = false;
+
+    for (const message of accepted) {
+      if (messages.getPending().some((row) => row.clientId === message.clientId)) {
         await outbox.remove(message.clientId);
-        pending = pending.filter((row) => row.clientId !== message.clientId);
+        changed = messages.removePending(message.clientId) || changed;
       }
     }
 
-    return merge(messages);
+    return messages.merge(accepted) || changed;
   }
 
   async function deliver() {
-    while (pending.length && isOnline() && !resetting && !resetRequired) {
-      const message = pending[0];
+    while (messages.getPending().length && isOnline() && !resetting && !resetRequired) {
+      const message = messages.getPending()[0];
 
       if (!message || message.failure) {
         break;
@@ -160,9 +124,7 @@ export async function createThreadStore(
           /* The durable outbox still retains the send for restart recovery. */
         }
 
-        pending = pending.map((row) =>
-          row.clientId === message.clientId ? { ...row, failure } : row,
-        );
+        messages.setFailure(message.clientId, failure);
         error =
           failure === 'unknown'
             ? 'Delivery not confirmed. Retry safely; the same message will not be added twice.'
@@ -209,13 +171,12 @@ export async function createThreadStore(
   }
 
   async function clearFailures() {
-    for (const message of pending) {
+    for (const message of messages.getPending()) {
       if (message.failure) {
         await outbox.fail(message.clientId, null);
+        messages.setFailure(message.clientId, null);
       }
     }
-
-    pending = pending.map((message) => ({ ...message, failure: null }));
   }
 
   function sync(): Promise<void> {
@@ -252,9 +213,7 @@ export async function createThreadStore(
 
         const saved = await outbox.enqueue(message);
 
-        if (!pending.some((row) => row.clientId === saved.clientId)) {
-          pending = [...pending, saved];
-        }
+        messages.enqueue(saved);
 
         publish();
       });
@@ -266,10 +225,15 @@ export async function createThreadStore(
           return;
         }
 
-        await clearFailures();
-        error = null;
-        publish();
-        await deliver();
+        try {
+          await clearFailures();
+          error = null;
+          publish();
+          await deliver();
+        } catch {
+          error = 'Could not prepare retry. Your message is saved; tap Retry again.';
+          publish();
+        }
       });
     },
     sync,
@@ -287,7 +251,7 @@ export async function createThreadStore(
             : await history.getBefore(pagingCursor, PAGE_SIZE);
 
           await history.save(page);
-          merge(page);
+          messages.merge(page);
           pagingCursor = page[page.length - 1]?.serverSequence ?? pagingCursor;
           if (isOnline()) {
             hasOlder = page.length === PAGE_SIZE;

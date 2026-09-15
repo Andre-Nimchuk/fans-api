@@ -3,8 +3,15 @@ import { Pressable, Text, View } from 'react-native';
 
 import { Avatar } from './avatar';
 import type { Conversation } from '../model/conversations';
-import type { ThreadMessage } from '../model/thread-store';
+import type { ThreadMessage } from '../model/thread-messages';
 import { formatMessageDay, formatMessageTime } from '../utils/format-time';
+
+const statusLabels: Record<ThreadMessage['status'], string> = {
+  sent: 'Sent',
+  waiting: 'Waiting',
+  unknown: 'Not confirmed',
+  failed: 'Not sent',
+};
 
 export const MessageBubble = memo(function MessageBubble({
   message,
@@ -18,6 +25,7 @@ export const MessageBubble = memo(function MessageBubble({
   retry: () => Promise<void>;
 }) {
   const outgoing = message.sender === 'self';
+  const canRetry = message.status === 'failed' || message.status === 'unknown';
 
   return (
     <View>
@@ -43,20 +51,12 @@ export const MessageBubble = memo(function MessageBubble({
           <View className="mt-2 flex-row flex-wrap items-center gap-x-2">
             <Text className="text-[11px] text-muted">{formatMessageTime(message.createdAt)}</Text>
             {outgoing ? (
-              <Text
-                className={`text-[11px] ${message.status === 'failed' || message.status === 'unknown' ? 'text-red-700' : 'text-muted'}`}
-              >
-                {message.status === 'sent'
-                  ? 'Sent'
-                  : message.status === 'waiting'
-                    ? 'Waiting'
-                    : message.status === 'unknown'
-                      ? 'Not confirmed'
-                      : 'Not sent'}
+              <Text className={`text-[11px] ${canRetry ? 'text-red-700' : 'text-muted'}`}>
+                {statusLabels[message.status]}
               </Text>
             ) : null}
           </View>
-          {message.status === 'failed' || message.status === 'unknown' ? (
+          {canRetry ? (
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Retry message"

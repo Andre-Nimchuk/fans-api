@@ -1,13 +1,10 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { test } from 'node:test';
 import type { TestContext } from 'node:test';
 
 import { replayLostResponse } from './fixtures/lost-response';
-import { openNodeDatabase } from './helpers/node-database';
+import { createDatabaseFiles } from './helpers/database-files';
 import { createClientHistory } from '../src/features/chat/data/client-history';
 import { createChatSession } from '../src/features/chat/data/create-chat-session';
 import { createOutbox } from '../src/features/chat/data/outbox';
@@ -17,14 +14,10 @@ import { createAcceptedMessages } from '../src/services/mock/chat/accepted-messa
 const message = { clientId: 'outgoing', text: 'Keep this message', createdAt: 100 };
 
 async function fixture(t: TestContext) {
-  const directory = await mkdtemp(join(tmpdir(), 'fan-recovery-'));
-
-  t.after(() => rm(directory, { recursive: true, force: true }));
+  const files = await createDatabaseFiles(t);
 
   return async function open() {
-    const databases = ['client.db', 'server.db', 'history.db'].map((name) =>
-      openNodeDatabase(join(directory, name)),
-    );
+    const databases = ['client.db', 'server.db', 'history.db'].map((name) => files.open(name));
     const [clientDb, serverDb, historyDb] = databases;
 
     assert.ok(clientDb && serverDb && historyDb);
@@ -32,24 +25,12 @@ async function fixture(t: TestContext) {
     const outbox = await createOutbox(clientDb);
     const server = await createAcceptedMessages(serverDb);
     const history = await createClientHistory(historyDb);
-    let closed = false;
-
-    async function close() {
-      if (closed) {
-        return;
-      }
-
-      closed = true;
-      await Promise.all(databases.map((db) => db.close()));
-    }
-
-    t.after(close);
 
     return {
       outbox,
       server,
       history,
-      close,
+      close: () => Promise.all(databases.map(files.close)),
       session: () => createChatSession(outbox, server, randomUUID, history),
     };
   };
@@ -287,13 +268,9 @@ test('a partial cache write does not advance the cursor and replay fills the mis
 });
 
 test('outbox migration preserves pending IDs and text from the previous schema', async (t) => {
-  const directory = await mkdtemp(join(tmpdir(), 'fan-migration-'));
-  const db = openNodeDatabase(join(directory, 'client.db'));
+  const files = await createDatabaseFiles(t);
+  const db = files.open('client.db');
 
-  t.after(async () => {
-    await db.close();
-    await rm(directory, { recursive: true, force: true });
-  });
   await db.exec(`CREATE TABLE outbox (
     local_order INTEGER PRIMARY KEY AUTOINCREMENT, client_id TEXT NOT NULL UNIQUE,
     text TEXT NOT NULL, created_at INTEGER NOT NULL);
@@ -305,4 +282,64 @@ test('outbox migration preserves pending IDs and text from the previous schema',
   assert.deepEqual(await outbox.list(), [
     { clientId: 'existing', text: 'Keep my text', createdAt: 100, localOrder: 1, failure: null },
   ]);
+});
+
+test('pagination and repeated sync preserve unchanged message objects for memoized rows', async (t) => {
+  const stores = await (await fixture(t))();
+
+  for (let index = 0; index < 35; index++) {
+    await stores.server.accept({ ...message, clientId: `history-${index}` }, 'contact');
+  }
+
+  const thread = await stores.session();
+  const initial = thread.getSnapshot().messages;
+  const loading = thread.loadOlder();
+
+  assert.equal(thread.getSnapshot().loadingOlder, true);
+  assert.strictEqual(thread.getSnapshot().messages, initial);
+  await loading;
+
+  const loaded = thread.getSnapshot().messages;
+
+  assert.equal(loaded.length, 35);
+  initial.forEach((row, index) => assert.strictEqual(loaded[index], row));
+  await thread.sync();
+  assert.strictEqual(thread.getSnapshot().messages, loaded);
+
+  await thread.simulation.setOffline(true);
+  await thread.send(message);
+  assert.equal(thread.getSnapshot().messages[0]?.status, 'waiting');
+  loaded.forEach((row, index) => assert.strictEqual(thread.getSnapshot().messages[index + 1], row));
+});
+
+test('retry write failure preserves the failed send and allows a later retry', async (t) => {
+  const stores = await (await fixture(t))();
+  let failRetryWrite = true;
+  const outbox = {
+    ...stores.outbox,
+    async fail(...args: Parameters<typeof stores.outbox.fail>) {
+      if (args[1] === null && failRetryWrite) {
+        throw new Error('SQLite write unavailable');
+      }
+
+      return stores.outbox.fail(...args);
+    },
+  };
+  const thread = await createChatSession(outbox, stores.server, randomUUID, stores.history);
+
+  thread.simulation.armSendFailure(true);
+  await thread.send(message);
+  await waitFor(thread, (state) => state.messages[0]?.status === 'failed');
+  await thread.retry();
+  assert.match(thread.getSnapshot().error ?? '', /Could not prepare retry/);
+  assert.equal(thread.getSnapshot().messages[0]?.status, 'failed');
+  assert.equal((await stores.outbox.list())[0]?.text, message.text);
+  assert.deepEqual(await stores.server.getAfter(), []);
+
+  failRetryWrite = false;
+  await thread.retry();
+  assert.equal(thread.getSnapshot().messages[0]?.status, 'sent');
+  assert.equal(thread.getSnapshot().error, null);
+  assert.equal((await stores.server.getAfter()).length, 1);
+  assert.deepEqual(await stores.outbox.list(), []);
 });

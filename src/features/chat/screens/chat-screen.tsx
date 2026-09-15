@@ -4,7 +4,7 @@ import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { ChatHeader } from '../components/chat-header';
 import { Composer } from '../components/composer';
 import { MessageList } from '../components/message-list';
-import { ScenarioPanel } from '../components/scenario-panel';
+import { ScenarioPanel } from '../components/scenarios/scenario-panel';
 import type { Conversation } from '../model/conversations';
 import { useThread, useChatContext } from '../providers/chat-provider';
 
