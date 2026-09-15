@@ -1,56 +1,53 @@
-# Welcome to your Expo app 👋
+# Fan Chat
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Expo SDK 57, React Native and TypeScript. The starter demos have been removed; the app currently opens an empty screen. Chat and simulated subscriptions are not implemented yet.
 
-## Get started
+## Setup
 
-1. Install dependencies
+Use Node.js 22.13 or newer and Yarn Classic 1.22.22. The repository includes an `.nvmrc` for Node 22.
 
-   ```bash
-   npm install
-   ```
-
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
+```sh
+nvm use
+corepack enable
+yarn install --frozen-lockfile
+yarn start
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+`nvm use` is optional if a compatible Node version is already installed. `corepack enable` enables the package-manager shim; skip it if Yarn 1.22.22 is already available.
 
-### Other setup steps
+## Run
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+- `yarn ios` — start Expo and open an installed iOS simulator (macOS with Xcode).
+- `yarn android` — start Expo and open an Android emulator or connected device (Android SDK required).
+- `yarn web` — browser preview.
 
-## Learn more
+Native simulator/device behavior has not been verified yet. Choose and record the demo device and OS during implementation. If added native dependencies require a development build, update these instructions with the verified build steps.
 
-To learn more about developing your project with Expo, look at the following resources:
+## Quality checks
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+```sh
+yarn validate
+```
 
-## Join the community
+This runs TypeScript, ESLint with zero warnings, and Prettier's formatting check without changing files.
 
-Join our community of developers creating universal apps.
+| Command             | Purpose                                                                         |
+| ------------------- | ------------------------------------------------------------------------------- |
+| `yarn typecheck`    | Strict TypeScript checks, including indexed access and unused code              |
+| `yarn lint`         | Expo ESLint rules plus type imports, explicit-any and non-null assertion checks |
+| `yarn lint:fix`     | Apply available ESLint fixes                                                    |
+| `yarn format`       | Format application code, configuration and project documentation                |
+| `yarn format:check` | Check formatting without writing                                                |
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+VS Code recommendations enable ESLint fixes and Prettier formatting on save with the workspace TypeScript version. Local task notes, agent instructions and generated files are excluded from bulk formatting.
+
+ESLint uses the [Expo flat configuration](https://docs.expo.dev/guides/using-eslint/); Prettier runs separately with [conflicting lint rules disabled](https://prettier.io/docs/integrating-with-linters).
+
+ESLint is kept on 9.x for compatibility with the React plugin shipped by the SDK 57 preset. Its upstream support has ended; revisit the version when that preset supports ESLint 10. The combined script is named `validate` because `check` is a built-in Yarn Classic command.
+
+## Source layout
+
+- `src/app/_layout.tsx` — root navigation and status bar.
+- `src/app/index.tsx` — entry route for the chat.
+
+Feature and service modules will be added with their implementation. Behavioral tests will accompany the message-recovery and paid-access logic; there is no test suite yet.

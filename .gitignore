@@ -36,8 +36,13 @@ yarn-error.*
 # typescript
 *.tsbuildinfo
 
-example
+# validation output
+coverage/
+.eslintcache
 
 # generated native folders
 /ios
 /android
+
+# Local task specification and working notes
+/.local/

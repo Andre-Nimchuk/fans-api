@@ -1,0 +1,14 @@
+node_modules/
+.expo/
+.local/
+.agents/
+.claude/
+dist/
+coverage/
+android/
+ios/
+expo-env.d.ts
+yarn.lock
+AGENTS.md
+CLAUDE.md
+**/AGENTS.md
