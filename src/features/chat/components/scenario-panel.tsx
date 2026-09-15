@@ -1,5 +1,5 @@
 import { useRef, useState, useSyncExternalStore } from 'react';
-import { Keyboard, Pressable, ScrollView, Text, View } from 'react-native';
+import { Alert, Keyboard, Pressable, ScrollView, Text, View } from 'react-native';
 
 import type { ChatSession } from '../data/create-chat-session';
 
@@ -24,7 +24,7 @@ function ScenarioAction({ label, onPress, disabled, selected }: ScenarioActionPr
   );
 }
 
-export function ScenarioPanel({ thread }: { thread: ChatSession }) {
+export function ScenarioPanel({ thread, onReset }: { thread: ChatSession; onReset: () => void }) {
   const { simulation } = thread;
   const state = useSyncExternalStore(
     simulation.subscribe,
@@ -75,22 +75,22 @@ export function ScenarioPanel({ thread }: { thread: ChatSession }) {
           {expanded ? 'Hide scenarios' : 'Mock scenarios'} · {state.offline ? 'Offline' : 'Online'}
           {state.failSave ? ' · Save failure armed' : ''}
           {state.failSend ? ' · Send failure armed' : ''}
+          {state.loseResponse ? ' · Lost response armed' : ''}
         </Text>
       </Pressable>
       {expanded ? (
         <ScrollView style={{ maxHeight: 220 }} keyboardShouldPersistTaps="handled">
           <View className="gap-3 px-5 pb-3">
             <Text className="text-xs text-muted">
-              This chat only. Simulation switches reset when the app restarts; saved messages
-              remain.
+              This chat only. Offline mode and saved messages survive app restart.
             </Text>
             <View className="flex-row flex-wrap gap-2">
               <ScenarioAction
                 label={state.offline ? 'Reconnect' : 'Go offline'}
-                disabled={busy}
+                disabled={busy || history.resetting}
                 onPress={() => {
                   void run(async () => {
-                    simulation.setOffline(!state.offline);
+                    await simulation.setOffline(!state.offline);
                     if (simulation.isOnline()) {
                       await thread.sync();
                     }
@@ -99,34 +99,65 @@ export function ScenarioPanel({ thread }: { thread: ChatSession }) {
               />
               <ScenarioAction
                 label="Add 4 incoming"
-                disabled={!state.offline || busy}
+                disabled={!state.offline || busy || history.resetting}
                 onPress={() => {
                   void run(simulation.addIncoming);
                 }}
               />
               <ScenarioAction
                 label="Sync"
-                disabled={state.offline || busy}
+                disabled={state.offline || busy || history.resetting}
                 onPress={() => {
                   void run(thread.sync);
                 }}
               />
               <ScenarioAction
-                label="Fail next save"
+                label="Lose next response"
+                disabled={busy || history.resetting}
+                selected={state.loseResponse}
+                onPress={() => simulation.armLostResponse(!state.loseResponse)}
+              />
+              <ScenarioAction
+                label="Reset demo"
                 disabled={busy}
+                onPress={() => {
+                  Keyboard.dismiss();
+                  Alert.alert(
+                    'Reset this chat?',
+                    'Delete its messages and draft, restore the sample history and go online. Other chats stay unchanged.',
+                    [
+                      { text: 'Cancel', style: 'cancel' },
+                      {
+                        text: 'Reset',
+                        style: 'destructive',
+                        onPress: () => {
+                          void run(async () => {
+                            onReset();
+                            await thread.resetDemo();
+                          });
+                        },
+                      },
+                    ],
+                  );
+                }}
+              />
+              <ScenarioAction
+                label="Fail next save"
+                disabled={busy || history.resetting}
                 selected={state.failSave}
                 onPress={() => simulation.armSaveFailure(!state.failSave)}
               />
               <ScenarioAction
                 label="Fail next send"
-                disabled={busy}
+                disabled={busy || history.resetting}
                 selected={state.failSend}
                 onPress={() => simulation.armSendFailure(!state.failSend)}
               />
             </View>
             <Text className="text-xs text-muted">
               Save failure keeps text in the input. Send failure keeps a saved bubble with Retry.
-              Faults fire once; tap again to disarm.
+              Lost response means the server saved it but confirmation did not arrive. Retry is
+              safe. Faults fire once; tap again to disarm.
             </Text>
             <Text className="text-xs text-muted">
               Incoming added: {state.incomingCount}. Latest confirmed order:{' '}

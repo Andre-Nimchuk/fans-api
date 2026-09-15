@@ -20,10 +20,15 @@ interface ComposerProps {
   id: ConversationId;
   thread: ThreadStore;
   onSent: () => void;
+  disabled?: boolean;
 }
 
-export function Composer({ id, thread, onSent }: ComposerProps) {
-  const { text, input, saving, error, changeText, send } = useComposer({ id, thread, onSent });
+export function Composer({ id, thread, onSent, disabled = false }: ComposerProps) {
+  const { text, input, saving, error, changeText, send } = useComposer({
+    id,
+    thread,
+    onSent,
+  });
   const { fontScale } = useWindowDimensions();
   const { bottom } = useSafeAreaInsets();
   const { progress } = useReanimatedKeyboardAnimation();
@@ -65,6 +70,7 @@ export function Composer({ id, thread, onSent }: ComposerProps) {
               includeFontPadding: false,
             }}
             allowFontScaling={false}
+            editable={!disabled}
             multiline
             submitBehavior="newline"
             scrollEnabled
@@ -79,12 +85,12 @@ export function Composer({ id, thread, onSent }: ComposerProps) {
           testID="send-message"
           accessibilityRole="button"
           accessibilityLabel="Send message"
-          accessibilityState={{ disabled: !text.trim() || saving, busy: saving }}
-          disabled={!text.trim() || saving}
+          accessibilityState={{ disabled: !text.trim() || saving || disabled, busy: saving }}
+          disabled={!text.trim() || saving || disabled}
           onPress={() => {
             void send();
           }}
-          className={`h-12 w-12 items-center justify-center rounded-2xl ${!text.trim() || saving ? 'bg-brand/40' : 'bg-brand active:opacity-80'}`}
+          className={`h-12 w-12 items-center justify-center rounded-2xl ${!text.trim() || saving || disabled ? 'bg-brand/40' : 'bg-brand active:opacity-80'}`}
         >
           {saving ? <ActivityIndicator color="white" /> : <Icon name="send" color="white" />}
         </Pressable>

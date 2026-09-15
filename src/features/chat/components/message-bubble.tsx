@@ -44,17 +44,19 @@ export const MessageBubble = memo(function MessageBubble({
             <Text className="text-[11px] text-muted">{formatMessageTime(message.createdAt)}</Text>
             {outgoing ? (
               <Text
-                className={`text-[11px] ${message.status === 'failed' ? 'text-red-700' : 'text-muted'}`}
+                className={`text-[11px] ${message.status === 'failed' || message.status === 'unknown' ? 'text-red-700' : 'text-muted'}`}
               >
                 {message.status === 'sent'
                   ? 'Sent'
                   : message.status === 'waiting'
                     ? 'Waiting'
-                    : 'Not sent'}
+                    : message.status === 'unknown'
+                      ? 'Not confirmed'
+                      : 'Not sent'}
               </Text>
             ) : null}
           </View>
-          {message.status === 'failed' ? (
+          {message.status === 'failed' || message.status === 'unknown' ? (
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Retry message"

@@ -2,7 +2,7 @@
 
 Expo SDK 57 · React Native · TypeScript. Three mock conversations with a shared chat screen. Local mocks require no private credentials or real payments.
 
-**Status:** conversation list, paginated text chat and persistent sending work. A per-chat scenario panel supports write/delivery failures and offline/reconnect. Durable offline restart and the simulated subscription paywall are next.
+**Status:** conversation list, paginated text chat and persistent sending work. Durable offline restart, lost-response retry and per-chat demo reset are implemented. Simulated billing and performance profiling are next.
 
 ## Run
 
@@ -31,26 +31,32 @@ yarn test:watch  # Tests during development
 yarn format     # Apply formatting
 ```
 
-**13 storage/scenario tests** against real SQLite files: restart persistence, retry deduplication, ordering/pagination, conflicting IDs, write failure, schema recovery and offline reconciliation. iOS interaction checks cover the keyboard, four-line input limit, sending and separate drafts. Node 22 reports an experimental SQLite warning during tests.
+**22 storage/recovery tests** against real SQLite files: restart persistence, retry deduplication, ordering/pagination, conflicting IDs, write failure, schema recovery and offline reconciliation. Earlier iOS interaction checks cover the keyboard, four-line input limit, sending and separate drafts; the new recovery controls still need the recorded device walkthrough. Node 22 reports an experimental SQLite warning during tests.
 
 ## Try the failure scenarios
 
-Open a chat → **Mock scenarios**. Switches affect this chat and reset on app restart; saved messages remain.
+Open a chat → **Mock scenarios**. Controls affect this chat only. Offline mode, pending messages and received history survive app restart.
 
 - **Fail next save** → send: text stays in the input; no queued bubble. Send again to save it.
 - **Fail next send** → send: saved bubble shows **Not sent → Retry**. Retry keeps the same ID.
-- **Go offline** → send three messages → **Add 4 incoming** → **Reconnect**: seven messages are confirmed in server order. **Sync** again adds no copies. Latest sequence numbers are visible in the panel.
+- **Go offline** → send three messages → force-quit/reopen (all three still **Waiting**) → **Add 4 incoming** → **Reconnect**: seven messages are confirmed in server order. **Sync** again adds no copies. Latest sequence numbers are visible in the panel.
+
+- **Lose next response** → send: the server saves it, but the bubble shows **Not confirmed**. **Retry** returns the original acceptance, producing one copy.
+- **Reset demo** → confirm: restore this chat's 42 sample messages, clear its queue/cache/draft and return online. An interrupted reset completes at startup.
+
+`yarn demo:duplicate` intentionally fails with `2 !== 1`: the isolated broken client creates a new ID after a lost response. The passing regression uses the original ID. This fixture is excluded from `yarn validate`.
 
 Faults fire once; tap an armed fault again to cancel it. This is simulated connectivity, independent of airplane mode.
 
 ## Decisions
 
-- Each conversation has separate SQLite files for its client queue and mock server history. Enqueue/accept returns only after persistence; retry with the same client ID returns the original accepted message.
+- Each conversation has separate SQLite files for its queue, received-history cache/settings and mock server history. Enqueue/accept returns only after persistence; retry with the same client ID returns the original accepted message.
+- Cache writes precede cursor advancement and queue cleanup; replay after interruption is idempotent. Reset is serialized with delivery and has a durable completion marker.
 - The mock assigns final order; pending messages retain local order. History loads in pages of 30; the inverted list anchors the latest messages and offers a return button when reading older history.
 - `src/features/chat/` owns chat rules, `src/services/mock/` owns mock acceptance, and `src/shared/storage/` owns database access. `tests/` verifies these boundaries. Styles use [NativeWind 4.2.7](https://www.nativewind.dev/docs/getting-started/installation) with shared Tailwind colors.
 
 ## Remaining work
 
-Lost-response bug reproduction and red/green regression; full offline/restart/reconnect flow; paywall UI; purchase confirmation tests; 50,000-message profiling and before/after measurements. No performance results are claimed yet.
+Uncut device recovery recordings; paywall UI; purchase confirmation tests; 50,000-message profiling and before/after measurements. No performance results are claimed yet.
 
 Final submission will include scenario recordings, measured results, time spent, `AI.md`, and the required brief explanations of store billing, upload recovery and store policies.

@@ -6,6 +6,7 @@ export interface SendMessage {
 
 export interface PendingMessage extends SendMessage {
   localOrder: number;
+  failure: 'failed' | 'unknown' | null;
 }
 
 export interface AcceptedMessage extends SendMessage {

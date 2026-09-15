@@ -1,4 +1,6 @@
+import type { ClientHistory } from '@/features/chat/data/client-history';
 import type { ChatService, Outbox } from '@/features/chat/model/contracts';
+import { DeliveryError } from '@/features/chat/model/delivery-error';
 
 import type { createAcceptedMessages } from './accepted-messages';
 
@@ -7,20 +9,33 @@ interface SimulationState {
   failSave: boolean;
   failSend: boolean;
   incomingCount: number;
+  loseResponse: boolean;
 }
 
-export function createChatSimulation(
+export async function createChatSimulation(
   outbox: Outbox,
   server: Awaited<ReturnType<typeof createAcceptedMessages>>,
   createId: () => string,
+  history: ClientHistory,
 ) {
+  const saved = await history.getSettings();
+  let work: Promise<unknown> = Promise.resolve();
   let state: SimulationState = {
-    offline: false,
+    offline: saved.offline,
     failSave: false,
     failSend: false,
-    incomingCount: 0,
+    incomingCount: saved.incomingCount,
+    loseResponse: false,
   };
   const listeners = new Set<() => void>();
+
+  function exclusive<T>(action: () => Promise<T>): Promise<T> {
+    const result = work.then(action);
+
+    work = result.catch(() => undefined);
+
+    return result;
+  }
 
   function update(patch: Partial<SimulationState>) {
     state = { ...state, ...patch };
@@ -31,7 +46,7 @@ export function createChatSimulation(
 
   function requireOnline() {
     if (state.offline) {
-      throw new Error('Simulated connection is offline.');
+      throw new DeliveryError('offline', 'Simulated connection is offline.');
     }
   }
 
@@ -56,7 +71,18 @@ export function createChatSimulation(
         throw new Error('Simulated delivery failure.');
       }
 
-      return server.accept(message);
+      const loseResponse = state.loseResponse;
+
+      update({ loseResponse: false });
+
+      const accepted = await server.accept(message);
+
+      // REVIEW: Throw only AFTER the durable server commit. Retry must reuse the original client ID.
+      if (loseResponse || state.offline) {
+        throw new DeliveryError('unknown', 'The server response was lost.');
+      }
+
+      return accepted;
     },
     async getBefore(cursor, limit) {
       requireOnline();
@@ -83,32 +109,53 @@ export function createChatSimulation(
       };
     },
     setOffline(offline: boolean) {
-      update({ offline });
+      return exclusive(async () => {
+        await history.setOffline(offline);
+        update({ offline });
+      });
+    },
+    armLostResponse(enabled: boolean) {
+      update({ loseResponse: enabled, failSend: false });
+    },
+    reset(resetStorage: () => Promise<void>) {
+      return exclusive(async () => {
+        await resetStorage();
+        update({
+          offline: false,
+          incomingCount: 0,
+          failSave: false,
+          failSend: false,
+          loseResponse: false,
+        });
+      });
     },
     armSaveFailure(enabled: boolean) {
       update({ failSave: enabled });
     },
     armSendFailure(enabled: boolean) {
-      update({ failSend: enabled });
+      update({ failSend: enabled, loseResponse: false });
     },
-    async addIncoming() {
-      if (!state.offline) {
-        throw new Error('Go offline before adding missed incoming messages.');
-      }
+    addIncoming() {
+      return exclusive(async () => {
+        if (!state.offline) {
+          throw new Error('Go offline before adding missed incoming messages.');
+        }
 
-      for (let index = 0; index < 4; index++) {
-        await server.accept(
-          {
-            clientId: createId(),
-            text: `Message received while offline (${state.incomingCount + 1})`,
-            createdAt: Date.now(),
-          },
-          'contact',
-        );
-        update({ incomingCount: state.incomingCount + 1 });
-      }
+        for (let index = 0; index < 4; index++) {
+          await server.accept(
+            {
+              clientId: createId(),
+              text: `Message received while offline (${state.incomingCount + 1})`,
+              createdAt: Date.now(),
+            },
+            'contact',
+          );
+          await history.setIncomingCount(state.incomingCount + 1);
+          update({ incomingCount: state.incomingCount + 1 });
+        }
+      });
     },
   };
 }
 
-export type ChatSimulation = ReturnType<typeof createChatSimulation>;
+export type ChatSimulation = Awaited<ReturnType<typeof createChatSimulation>>;

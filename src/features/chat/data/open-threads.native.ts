@@ -4,6 +4,7 @@ import { createAcceptedMessages } from '@/services/mock/chat/accepted-messages';
 import { seedMessages } from '@/services/mock/chat/seed';
 import { openDatabase } from '@/shared/storage/open-database';
 
+import { createClientHistory } from './client-history';
 import { createChatSession } from './create-chat-session';
 import type { ChatSession } from './create-chat-session';
 import { createOutbox } from './outbox';
@@ -36,6 +37,11 @@ async function initialize() {
 
       opened.push(serverDb);
 
+      const historyDb = await openDatabase(`chat-${conversation.id}-history.db`);
+
+      opened.push(historyDb);
+
+      const history = await createClientHistory(historyDb);
       const outbox = await createOutbox(client);
       const server = await createAcceptedMessages(serverDb);
 
@@ -43,7 +49,10 @@ async function initialize() {
         await server.accept(message, message.sender);
       }
 
-      stores.set(conversation.id, await createChatSession(outbox, server, randomUUID));
+      stores.set(
+        conversation.id,
+        await createChatSession(outbox, server, randomUUID, history, seedMessages(conversation.id)),
+      );
     }
 
     return stores;

@@ -23,6 +23,11 @@ export async function createAcceptedMessages(db: Database, now = Date.now) {
   ]);
 
   return {
+    reset(): Promise<void> {
+      return db.exec(
+        "DELETE FROM accepted_messages; DELETE FROM sqlite_sequence WHERE name = 'accepted_messages';",
+      );
+    },
     async accept(
       message: SendMessage,
       sender: AcceptedMessage['sender'] = 'self',

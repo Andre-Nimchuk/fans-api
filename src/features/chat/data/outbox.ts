@@ -14,10 +14,13 @@ const schema = `
     created_at INTEGER NOT NULL
   );
 `;
-const columns = 'client_id AS clientId, text, created_at AS createdAt, local_order AS localOrder';
+const columns =
+  'client_id AS clientId, text, created_at AS createdAt, local_order AS localOrder, failure';
 
 export async function createOutbox(db: Database) {
-  await initializeDatabase(db, schema);
+  await initializeDatabase(db, schema, [
+    "ALTER TABLE outbox ADD COLUMN failure TEXT CHECK(failure IN ('failed', 'unknown'));",
+  ]);
 
   return {
     async enqueue(message: SendMessage): Promise<PendingMessage> {
@@ -40,6 +43,12 @@ export async function createOutbox(db: Database) {
       assertSameSend(stored, message);
 
       return stored;
+    },
+    fail(clientId: string, failure: 'failed' | 'unknown' | null): Promise<void> {
+      return db.run('UPDATE outbox SET failure = ? WHERE client_id = ?', [failure, clientId]);
+    },
+    clear(): Promise<void> {
+      return db.exec("DELETE FROM outbox; DELETE FROM sqlite_sequence WHERE name = 'outbox';");
     },
     list(): Promise<PendingMessage[]> {
       return db.all(`SELECT ${columns} FROM outbox ORDER BY local_order ASC`);

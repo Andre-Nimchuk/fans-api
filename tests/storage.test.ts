@@ -6,6 +6,7 @@ import { test } from 'node:test';
 import type { TestContext } from 'node:test';
 
 import { openNodeDatabase } from './helpers/node-database';
+import { createClientHistory } from '../src/features/chat/data/client-history';
 import { createChatSession } from '../src/features/chat/data/create-chat-session';
 import { CLIENT_DATABASE, createOutbox } from '../src/features/chat/data/outbox';
 import type { SendMessage } from '../src/features/chat/model/message';
@@ -154,9 +155,9 @@ test('failed schema initialization rolls back and a newer schema is never silent
   await assert.rejects(initializeDatabase(db, 'CREATE TABLE partial (id INTEGER); INVALID SQL;'));
   assert.deepEqual(await db.all('PRAGMA user_version'), [{ user_version: 0 }]);
   assert.deepEqual(await db.all("SELECT name FROM sqlite_master WHERE name = 'partial'"), []);
-  await db.exec('PRAGMA user_version = 2');
+  await db.exec('PRAGMA user_version = 999');
   await assert.rejects(createOutbox(db), /Unsupported database version/);
-  assert.deepEqual(await db.all('PRAGMA user_version'), [{ user_version: 2 }]);
+  assert.deepEqual(await db.all('PRAGMA user_version'), [{ user_version: 999 }]);
 });
 
 test('acceptance migration preserves v1 history and adds incoming sender identity', async (t) => {
@@ -191,7 +192,11 @@ test('thread pages older history without duplicates and keeps conversation store
     await server.accept({ ...message, clientId: `page-${index}` }, index % 2 ? 'self' : 'contact');
   }
 
-  const thread = await createThreadStore(outbox, server);
+  const thread = await createThreadStore(
+    outbox,
+    server,
+    await createClientHistory(files.open('history.db')),
+  );
 
   assert.equal(thread.getSnapshot().messages.length, 30);
 
@@ -211,6 +216,7 @@ test('thread pages older history without duplicates and keeps conversation store
   const other = await createThreadStore(
     await createOutbox(files.open('second-client.db')),
     await createAcceptedMessages(files.open('second-server.db')),
+    await createClientHistory(files.open('other-history.db')),
   );
 
   assert.deepEqual(other.getSnapshot().messages, []);
@@ -223,16 +229,20 @@ test('thread exposes a saved failure, retries it and survives reopening without 
   const outbox = await createOutbox(clientDb);
   const server = await createAcceptedMessages(serverDb);
   let fail = true;
-  const thread = await createThreadStore(outbox, {
-    ...server,
-    async accept(value) {
-      if (fail) {
-        throw new Error('Unavailable');
-      }
+  const thread = await createThreadStore(
+    outbox,
+    {
+      ...server,
+      async accept(value) {
+        if (fail) {
+          throw new Error('Unavailable');
+        }
 
-      return server.accept(value);
+        return server.accept(value);
+      },
     },
-  });
+    await createClientHistory(files.open('history.db')),
+  );
 
   await thread.send(message);
   await thread.retry();
@@ -248,6 +258,7 @@ test('thread exposes a saved failure, retries it and survives reopening without 
   const reopened = await createThreadStore(
     await createOutbox(files.open(CLIENT_DATABASE)),
     await createAcceptedMessages(files.open(MOCK_SERVER_DATABASE)),
+    await createClientHistory(files.open('history.db')),
   );
 
   assert.equal(reopened.getSnapshot().messages.length, 1);
@@ -261,7 +272,12 @@ test(
     const files = await fixture(t);
     const outbox = await createOutbox(files.open(CLIENT_DATABASE));
     const server = await createAcceptedMessages(files.open(MOCK_SERVER_DATABASE));
-    const thread = await createChatSession(outbox, server, () => 'incoming');
+    const thread = await createChatSession(
+      outbox,
+      server,
+      () => 'incoming',
+      await createClientHistory(files.open('history.db')),
+    );
 
     thread.simulation.armSaveFailure(true);
     await assert.rejects(thread.send(message), /local write failure/);
@@ -308,9 +324,14 @@ test('offline scenario recovers four incoming before three queued sends in serve
   const outbox = await createOutbox(files.open(CLIENT_DATABASE));
   const server = await createAcceptedMessages(files.open(MOCK_SERVER_DATABASE));
   let incomingId = 0;
-  const thread = await createChatSession(outbox, server, () => `incoming-${++incomingId}`);
+  const thread = await createChatSession(
+    outbox,
+    server,
+    () => `incoming-${++incomingId}`,
+    await createClientHistory(files.open('history.db')),
+  );
 
-  thread.simulation.setOffline(true);
+  await thread.simulation.setOffline(true);
   for (let index = 0; index < 3; index++) {
     await thread.send({ ...message, clientId: `offline-${index}`, createdAt: 100 - index });
   }
@@ -325,7 +346,7 @@ test('offline scenario recovers four incoming before three queued sends in serve
   assert.equal(thread.getSnapshot().messages.length, 3);
   assert.equal((await server.getAfter()).length, 4);
 
-  thread.simulation.setOffline(false);
+  await thread.simulation.setOffline(false);
   await Promise.all([thread.sync(), thread.sync()]);
 
   const accepted = await server.getAfter();
