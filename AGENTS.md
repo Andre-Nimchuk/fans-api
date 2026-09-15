@@ -7,11 +7,12 @@
 - The original spec defines requirements; local architecture notes are proposals. User clarifications take precedence. Keep the original unchanged.
 - Build one chat screen and a simulated subscription paywall. Use `.local/design/README.md` for visual scope; adjacent screens and media/gift/PPV controls do not add features to the assignment.
 - Keep `.local/` out of commits, pushes and submission archives. If local references are absent, use available user context and report the missing source before making requirement-dependent assumptions.
+- Keep README short: setup/run/check commands and the explanations/results requested by the assignment. Store setup history and detailed internal diagnostics in `.local/`; add submission results as they become available.
 
 ## Expo and code
 
 - Read the exact versioned docs at https://docs.expo.dev/versions/v57.0.0/ before writing any code. Read relevant API pages for SDK 57 when selecting or using native dependencies; do not assume older Expo APIs apply.
-- Preserve Yarn Classic and `yarn.lock`. Run `yarn validate` for typecheck, lint and formatting; `yarn lint:fix` / `yarn format` apply fixes. Check `package.json` for other commands. There is no behavioral test script yet.
+- Preserve Yarn Classic and `yarn.lock`. Run `yarn validate` for typecheck, lint, formatting and behavioral tests; `yarn lint:fix` / `yarn format` apply fixes. `yarn test` runs focused tests against real file-backed SQLite. Check `package.json` for other commands.
 - Read `src/AGENTS.md` before source changes. Choose the smallest coherent implementation that satisfies the relevant requirement and can be explained in the walkthrough.
 
 ## Load skills only for the current work

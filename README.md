@@ -1,53 +1,46 @@
 # Fan Chat
 
-Expo SDK 57, React Native and TypeScript. The starter demos have been removed; the app currently opens an empty screen. Chat and simulated subscriptions are not implemented yet.
+Expo SDK 57 · React Native · TypeScript. One chat and a simulated subscription paywall, using local mocks without private credentials or real payments.
 
-## Setup
+**Status:** message storage is implemented; the main screen is still empty. Chat UI, delivery/recovery and payments are next.
 
-Use Node.js 22.13 or newer and Yarn Classic 1.22.22. The repository includes an `.nvmrc` for Node 22.
+## Run
+
+Requires Node.js 22.13+ and Yarn Classic 1.22.22. For iOS, install Xcode and boot a simulator.
 
 ```sh
 nvm use
 corepack enable
 yarn install --frozen-lockfile
-yarn start
+yarn ios
 ```
 
-`nvm use` is optional if a compatible Node version is already installed. `corepack enable` enables the package-manager shim; skip it if Yarn 1.22.22 is already available.
+Skip `nvm use` / `corepack enable` if the required Node and Yarn versions are already available.
 
-## Run
+- **iOS:** verified with Expo Go 57.0.9 on iPhone 17 Pro Max Simulator, iOS 26.3.1, development mode. Current dependencies work in Expo Go.
+- **Android:** `yarn android` with an emulator or connected device and Android SDK; device behavior untested.
+- **Web:** `yarn web` for a preview; native storage checks require iOS or Android.
 
-- `yarn ios` — start Expo and open an installed iOS simulator (macOS with Xcode).
-- `yarn android` — start Expo and open an Android emulator or connected device (Android SDK required).
-- `yarn web` — browser preview.
+Standalone native builds are untested and require [Xcode 26.4+ for SDK 57](https://docs.expo.dev/versions/v57.0.0/); local Xcode is 26.3.
 
-Native simulator/device behavior has not been verified yet. Choose and record the demo device and OS during implementation. If added native dependencies require a development build, update these instructions with the verified build steps.
-
-## Quality checks
+## Check
 
 ```sh
-yarn validate
+yarn validate    # TypeScript, ESLint, Prettier and tests
+yarn test:watch  # Tests during development
+yarn format     # Apply formatting
 ```
 
-This runs TypeScript, ESLint with zero warnings, and Prettier's formatting check without changing files.
+**8 storage tests pass** against real SQLite files: restart persistence, retry deduplication, ordering/pagination, conflicting IDs, write failure and schema recovery. The native diagnostic also preserved three queued messages and one accepted record after terminating and reopening Expo Go. Node 22 reports an experimental SQLite warning during tests.
 
-| Command             | Purpose                                                                         |
-| ------------------- | ------------------------------------------------------------------------------- |
-| `yarn typecheck`    | Strict TypeScript checks, including indexed access and unused code              |
-| `yarn lint`         | Expo ESLint rules plus type imports, explicit-any and non-null assertion checks |
-| `yarn lint:fix`     | Apply available ESLint fixes                                                    |
-| `yarn format`       | Format application code, configuration and project documentation                |
-| `yarn format:check` | Check formatting without writing                                                |
+## Decisions
 
-VS Code recommendations enable ESLint fixes and Prettier formatting on save with the workspace TypeScript version. Local task notes, agent instructions and generated files are excluded from bulk formatting.
+- Separate SQLite files hold the client queue and mock server history. Enqueue/accept returns only after persistence; retry with the same client ID returns the original accepted message.
+- The mock assigns final order; pending messages retain local order.
+- `src/features/chat/` owns chat rules, `src/services/mock/` owns mock acceptance, and `src/shared/storage/` owns database access. `tests/` verifies these boundaries; `src/dev/` contains the native diagnostic.
 
-ESLint uses the [Expo flat configuration](https://docs.expo.dev/guides/using-eslint/); Prettier runs separately with [conflicting lint rules disabled](https://prettier.io/docs/integrating-with-linters).
+## Remaining work
 
-ESLint is kept on 9.x for compatibility with the React plugin shipped by the SDK 57 preset. Its upstream support has ended; revisit the version when that preset supports ESLint 10. The combined script is named `validate` because `check` is a built-in Yarn Classic command.
+Lost-response bug reproduction and red/green regression; full offline/restart/reconnect flow; chat and paywall UI; purchase confirmation tests; 50,000-message profiling and before/after measurements. No performance results are claimed yet.
 
-## Source layout
-
-- `src/app/_layout.tsx` — root navigation and status bar.
-- `src/app/index.tsx` — entry route for the chat.
-
-Feature and service modules will be added with their implementation. Behavioral tests will accompany the message-recovery and paid-access logic; there is no test suite yet.
+Final submission will include scenario recordings, measured results, time spent, `AI.md`, and the required brief explanations of store billing, upload recovery and store policies.

@@ -8,6 +8,7 @@
     "expo-linking": "~57.0.10",
     "expo-router": "~57.0.21",
     "expo-splash-screen": "~57.0.9",
+    "expo-sqlite": "~57.0.3",
     "expo-status-bar": "~57.0.1",
     "expo-system-ui": "~57.0.4",
     "react": "19.2.3",
@@ -18,11 +19,13 @@
     "react-native-web": "~0.21.0"
   },
   "devDependencies": {
+    "@types/node": "^22",
     "@types/react": "~19.2.2",
     "eslint": "^9",
     "eslint-config-expo": "~57.0.2",
     "eslint-config-prettier": "^10.1.8",
     "prettier": "^3.9.6",
+    "tsx": "^4.23.13",
     "typescript": "~6.0.3"
   },
   "scripts": {
@@ -32,10 +35,12 @@
     "web": "expo start --web",
     "lint": "eslint . --max-warnings=0",
     "lint:fix": "yarn lint --fix",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tests/tsconfig.json",
     "format": "prettier . --write",
     "format:check": "prettier . --check",
-    "validate": "yarn typecheck && yarn lint && yarn format:check"
+    "validate": "yarn typecheck && yarn lint && yarn format:check && yarn test",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "test:watch": "node --import tsx --test --watch tests/*.test.ts"
   },
   "private": true,
   "packageManager": "yarn@1.22.22",
