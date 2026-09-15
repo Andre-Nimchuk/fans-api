@@ -1,14 +1,16 @@
+import { randomUUID } from 'expo-crypto';
+
 import { createAcceptedMessages } from '@/services/mock/chat/accepted-messages';
 import { seedMessages } from '@/services/mock/chat/seed';
 import { openDatabase } from '@/shared/storage/open-database';
 
+import { createChatSession } from './create-chat-session';
+import type { ChatSession } from './create-chat-session';
 import { createOutbox } from './outbox';
 import { conversations } from '../model/conversations';
 import type { ConversationId } from '../model/conversations';
-import { createThreadStore } from '../model/thread-store';
-import type { ThreadStore } from '../model/thread-store';
 
-let opening: Promise<Map<ConversationId, ThreadStore>> | undefined;
+let opening: Promise<Map<ConversationId, ChatSession>> | undefined;
 
 export function openThreads() {
   opening ??= initialize().catch((error: unknown) => {
@@ -20,7 +22,7 @@ export function openThreads() {
 }
 
 async function initialize() {
-  const stores = new Map<ConversationId, ThreadStore>();
+  const stores = new Map<ConversationId, ChatSession>();
   const opened: Awaited<ReturnType<typeof openDatabase>>[] = [];
 
   try {
@@ -41,7 +43,7 @@ async function initialize() {
         await server.accept(message, message.sender);
       }
 
-      stores.set(conversation.id, await createThreadStore(outbox, server));
+      stores.set(conversation.id, await createChatSession(outbox, server, randomUUID));
     }
 
     return stores;

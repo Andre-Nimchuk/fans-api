@@ -2,12 +2,12 @@ import { createContext, useContext, useEffect, useState } from 'react';
 import type { PropsWithChildren } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 
+import type { ChatSession } from '../data/create-chat-session';
 import { openThreads } from '../data/open-threads';
 import type { ConversationId } from '../model/conversations';
-import type { ThreadStore } from '../model/thread-store';
 
 interface ChatContextValue {
-  threads: Map<ConversationId, ThreadStore>;
+  threads: Map<ConversationId, ChatSession>;
   drafts: Map<ConversationId, string>;
 }
 const ChatContext = createContext<ChatContextValue | null>(null);

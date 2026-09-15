@@ -8,5 +8,6 @@ export interface Outbox {
 
 export interface ChatService {
   accept(message: SendMessage): Promise<AcceptedMessage>;
+  getAfter(serverSequence?: number, limit?: number): Promise<AcceptedMessage[]>;
   getBefore(serverSequence?: number, limit?: number): Promise<AcceptedMessage[]>;
 }

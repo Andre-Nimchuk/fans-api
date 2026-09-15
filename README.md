@@ -2,7 +2,7 @@
 
 Expo SDK 57 · React Native · TypeScript. Three mock conversations with a shared chat screen. Local mocks require no private credentials or real payments.
 
-**Status:** conversation list, paginated text chat and persistent sending work. Offline recovery controls and the simulated subscription paywall are next.
+**Status:** conversation list, paginated text chat and persistent sending work. A per-chat scenario panel supports write/delivery failures and offline/reconnect. Durable offline restart and the simulated subscription paywall are next.
 
 ## Run
 
@@ -31,7 +31,17 @@ yarn test:watch  # Tests during development
 yarn format     # Apply formatting
 ```
 
-**11 storage tests pass** against real SQLite files: restart persistence, retry deduplication, ordering/pagination, conflicting IDs, write failure and schema recovery. iOS interaction checks cover the keyboard, four-line input limit, sending and separate drafts. Node 22 reports an experimental SQLite warning during tests.
+**13 storage/scenario tests** against real SQLite files: restart persistence, retry deduplication, ordering/pagination, conflicting IDs, write failure, schema recovery and offline reconciliation. iOS interaction checks cover the keyboard, four-line input limit, sending and separate drafts. Node 22 reports an experimental SQLite warning during tests.
+
+## Try the failure scenarios
+
+Open a chat → **Mock scenarios**. Switches affect this chat and reset on app restart; saved messages remain.
+
+- **Fail next save** → send: text stays in the input; no queued bubble. Send again to save it.
+- **Fail next send** → send: saved bubble shows **Not sent → Retry**. Retry keeps the same ID.
+- **Go offline** → send three messages → **Add 4 incoming** → **Reconnect**: seven messages are confirmed in server order. **Sync** again adds no copies. Latest sequence numbers are visible in the panel.
+
+Faults fire once; tap an armed fault again to cancel it. This is simulated connectivity, independent of airplane mode.
 
 ## Decisions
 

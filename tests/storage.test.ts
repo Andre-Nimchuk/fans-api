@@ -6,6 +6,7 @@ import { test } from 'node:test';
 import type { TestContext } from 'node:test';
 
 import { openNodeDatabase } from './helpers/node-database';
+import { createChatSession } from '../src/features/chat/data/create-chat-session';
 import { CLIENT_DATABASE, createOutbox } from '../src/features/chat/data/outbox';
 import type { SendMessage } from '../src/features/chat/model/message';
 import { createThreadStore } from '../src/features/chat/model/thread-store';
@@ -251,4 +252,97 @@ test('thread exposes a saved failure, retries it and survives reopening without 
 
   assert.equal(reopened.getSnapshot().messages.length, 1);
   assert.equal(reopened.getSnapshot().messages[0]?.clientId, message.clientId);
+});
+
+test(
+  'scenario faults fire once: failed save is not queued, failed delivery needs explicit retry',
+  { timeout: 3000 },
+  async (t) => {
+    const files = await fixture(t);
+    const outbox = await createOutbox(files.open(CLIENT_DATABASE));
+    const server = await createAcceptedMessages(files.open(MOCK_SERVER_DATABASE));
+    const thread = await createChatSession(outbox, server, () => 'incoming');
+
+    thread.simulation.armSaveFailure(true);
+    await assert.rejects(thread.send(message), /local write failure/);
+    assert.deepEqual(await outbox.list(), []);
+    assert.deepEqual(thread.getSnapshot().messages, []);
+    assert.equal(thread.simulation.getSnapshot().failSave, false);
+
+    thread.simulation.armSendFailure(true);
+
+    const failed = new Promise<void>((resolve) => {
+      const unsubscribe = thread.subscribe(() => {
+        if (thread.getSnapshot().messages.some((row) => row.status === 'failed')) {
+          unsubscribe();
+          resolve();
+        }
+      });
+    });
+
+    await thread.send(message);
+    await failed;
+    assert.equal(thread.simulation.getSnapshot().failSend, false);
+    assert.equal((await outbox.list())[0]?.text, message.text);
+    assert.deepEqual(await server.getAfter(), []);
+
+    await thread.send({ ...message, clientId: 'second' });
+    assert.equal(
+      thread.getSnapshot().messages.find((row) => row.clientId === message.clientId)?.status,
+      'failed',
+    );
+    assert.deepEqual(await server.getAfter(), []);
+
+    await Promise.all([thread.retry(), thread.retry()]);
+    assert.deepEqual(await outbox.list(), []);
+    assert.deepEqual(
+      (await server.getAfter()).map((row) => row.clientId),
+      [message.clientId, 'second'],
+    );
+    assert.ok(thread.getSnapshot().messages.every((row) => row.status === 'sent'));
+  },
+);
+
+test('offline scenario recovers four incoming before three queued sends in server order without duplicates', async (t) => {
+  const files = await fixture(t);
+  const outbox = await createOutbox(files.open(CLIENT_DATABASE));
+  const server = await createAcceptedMessages(files.open(MOCK_SERVER_DATABASE));
+  let incomingId = 0;
+  const thread = await createChatSession(outbox, server, () => `incoming-${++incomingId}`);
+
+  thread.simulation.setOffline(true);
+  for (let index = 0; index < 3; index++) {
+    await thread.send({ ...message, clientId: `offline-${index}`, createdAt: 100 - index });
+  }
+
+  assert.ok(thread.getSnapshot().messages.every((row) => row.status === 'waiting'));
+  assert.deepEqual(
+    thread.getSnapshot().messages.map((row) => row.clientId),
+    ['offline-2', 'offline-1', 'offline-0'],
+  );
+  await thread.simulation.addIncoming();
+  await thread.sync();
+  assert.equal(thread.getSnapshot().messages.length, 3);
+  assert.equal((await server.getAfter()).length, 4);
+
+  thread.simulation.setOffline(false);
+  await Promise.all([thread.sync(), thread.sync()]);
+
+  const accepted = await server.getAfter();
+
+  assert.deepEqual(
+    accepted.map((row) => row.clientId),
+    ['incoming-1', 'incoming-2', 'incoming-3', 'incoming-4', 'offline-0', 'offline-1', 'offline-2'],
+  );
+  assert.deepEqual(await outbox.list(), []);
+  assert.deepEqual(
+    thread.getSnapshot().messages.map((row) => row.clientId),
+    accepted
+      .slice()
+      .reverse()
+      .map((row) => row.clientId),
+  );
+  await thread.sync();
+  assert.equal(thread.getSnapshot().messages.length, 7);
+  assert.equal((await server.getAfter()).length, 7);
 });
