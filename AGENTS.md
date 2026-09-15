@@ -5,7 +5,7 @@
 - Follow the user's current scope. Communicate in Ukrainian; use English for code, UI copy and submission documents.
 - Read `.local/task/current.md` for the current checkpoint. For implementation, read only the relevant rows of `.local/task/01-requirements.md` and the matching original section in `00-original-spec.md`.
 - The original spec defines requirements; local architecture notes are proposals. User clarifications take precedence. Keep the original unchanged.
-- Build one chat screen and a simulated subscription paywall. Use `.local/design/README.md` for visual scope; adjacent screens and media/gift/PPV controls do not add features to the assignment.
+- Build the user-requested list of three mock conversations, their shared chat screen and a simulated subscription paywall. Use `.local/design/README.md` for visual scope; search/filter/sort, media/gift/PPV and other adjacent features are excluded.
 - Keep `.local/` out of commits, pushes and submission archives. If local references are absent, use available user context and report the missing source before making requirement-dependent assumptions.
 - Keep README short: setup/run/check commands and the explanations/results requested by the assignment. Store setup history and detailed internal diagnostics in `.local/`; add submission results as they become available.
 

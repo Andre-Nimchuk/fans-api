@@ -1,0 +1,88 @@
+import { memo, useSyncExternalStore } from 'react';
+import { ActivityIndicator, FlatList, Platform, Pressable, Text, View } from 'react-native';
+
+import { Icon } from '@/shared/ui/icon';
+
+import { MessageBubble } from './message-bubble';
+import { useMessageScroll } from '../hooks/use-message-scroll';
+import type { Conversation } from '../model/conversations';
+import type { ThreadStore } from '../model/thread-store';
+
+export const MessageList = memo(function MessageList({
+  conversation,
+  thread,
+  jumpRequest,
+}: {
+  conversation: Conversation;
+  thread: ThreadStore;
+  jumpRequest: number;
+}) {
+  const snapshot = useSyncExternalStore(thread.subscribe, thread.getSnapshot, thread.getSnapshot);
+  const { list, showLatest, scrollToLatest, onScroll, keepPosition } =
+    useMessageScroll(jumpRequest);
+
+  return (
+    <View className="min-h-0 flex-1">
+      {snapshot.error ? (
+        <Text accessibilityRole="alert" className="bg-outgoing px-5 py-2 text-sm text-ink">
+          {snapshot.error}
+        </Text>
+      ) : null}
+      <FlatList
+        ref={list}
+        testID="message-list"
+        className="flex-1"
+        inverted
+        data={snapshot.messages}
+        keyExtractor={(item) => item.clientId}
+        renderItem={({ item, index }) => (
+          <MessageBubble
+            message={item}
+            conversation={conversation}
+            retry={thread.retry}
+            showDay={
+              new Date(item.createdAt).toDateString() !==
+              new Date(snapshot.messages[index + 1]?.createdAt ?? 0).toDateString()
+            }
+          />
+        )}
+        contentContainerStyle={{ paddingTop: 12, paddingBottom: 12, flexGrow: 1 }}
+        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+        keyboardShouldPersistTaps="handled"
+        automaticallyAdjustContentInsets={false}
+        contentInsetAdjustmentBehavior="never"
+        maintainVisibleContentPosition={{ minIndexForVisible: 0, autoscrollToTopThreshold: 64 }}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+        onLayout={keepPosition}
+        onContentSizeChange={keepPosition}
+        onEndReached={() => {
+          void thread.loadOlder();
+        }}
+        onEndReachedThreshold={0.3}
+        initialNumToRender={12}
+        maxToRenderPerBatch={10}
+        windowSize={7}
+        ListFooterComponent={
+          snapshot.loadingOlder ? <ActivityIndicator className="py-4" color="#605BE8" /> : null
+        }
+        ListEmptyComponent={
+          <Text className="py-8 text-center text-muted" style={{ transform: [{ scaleY: -1 }] }}>
+            Start your conversation.
+          </Text>
+        }
+      />
+      {showLatest ? (
+        <Pressable
+          testID="latest-messages"
+          accessibilityRole="button"
+          accessibilityLabel="Jump to latest messages"
+          className="absolute bottom-3 right-4 h-12 w-12 items-center justify-center rounded-full border border-line bg-white shadow-sm"
+          onPress={scrollToLatest}
+        >
+          <Icon name="down" color="#605BE8" />
+        </Pressable>
+      ) : null}
+    </View>
+  );
+});

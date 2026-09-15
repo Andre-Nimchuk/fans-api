@@ -7,20 +7,29 @@ export interface Database {
   close(): Promise<void>;
 }
 
-export async function initializeDatabase(db: Database, schema: string): Promise<void> {
+export async function initializeDatabase(
+  db: Database,
+  schema: string,
+  upgrades: string[] = [],
+): Promise<void> {
   await db.exec(
     'PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL; PRAGMA busy_timeout = 5000;',
   );
-  const [version] = await db.all<{ user_version: number }>('PRAGMA user_version');
-  if (!version || version.user_version > 1) {
-    throw new Error('Unsupported database version. Existing data was not reset.');
-  }
-  if (version.user_version === 1) return;
-
   await db.exec('BEGIN IMMEDIATE');
+
   try {
-    await db.exec(schema);
-    await db.exec('PRAGMA user_version = 1; COMMIT;');
+    const [version] = await db.all<{ user_version: number }>('PRAGMA user_version');
+    const migrations = [schema, ...upgrades];
+
+    if (!version || version.user_version > migrations.length) {
+      throw new Error('Unsupported database version. Existing data was not reset.');
+    }
+
+    for (const migration of migrations.slice(version.user_version)) {
+      await db.exec(migration);
+    }
+
+    await db.exec(`PRAGMA user_version = ${migrations.length}; COMMIT;`);
   } catch (error) {
     await db.exec('ROLLBACK');
     throw error;

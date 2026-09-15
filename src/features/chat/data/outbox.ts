@@ -1,8 +1,8 @@
 import type { Database } from '@/shared/storage/database';
 import { initializeDatabase } from '@/shared/storage/database';
 
-import { assertSameSend, validateSend } from './message';
-import type { PendingMessage, SendMessage } from './message';
+import { assertSameSend, validateSend } from '../model/message';
+import type { PendingMessage, SendMessage } from '../model/message';
 
 export const CLIENT_DATABASE = 'fan-chat-client.db';
 
@@ -27,16 +27,25 @@ export async function createOutbox(db: Database) {
         'INSERT INTO outbox (client_id, text, created_at) VALUES (?, ?, ?) ON CONFLICT(client_id) DO NOTHING',
         [message.clientId, message.text, message.createdAt],
       );
+
       const [stored] = await db.all<PendingMessage>(
         `SELECT ${columns} FROM outbox WHERE client_id = ?`,
         [message.clientId],
       );
-      if (!stored) throw new Error('The queued message could not be read back.');
+
+      if (!stored) {
+        throw new Error('The queued message could not be read back.');
+      }
+
       assertSameSend(stored, message);
+
       return stored;
     },
     list(): Promise<PendingMessage[]> {
       return db.all(`SELECT ${columns} FROM outbox ORDER BY local_order ASC`);
+    },
+    remove(clientId: string): Promise<void> {
+      return db.run('DELETE FROM outbox WHERE client_id = ?', [clientId]);
     },
   };
 }

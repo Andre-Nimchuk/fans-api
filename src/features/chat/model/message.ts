@@ -9,6 +9,7 @@ export interface PendingMessage extends SendMessage {
 }
 
 export interface AcceptedMessage extends SendMessage {
+  sender: 'self' | 'contact';
   serverSequence: number;
   acceptedAt: number;
 }

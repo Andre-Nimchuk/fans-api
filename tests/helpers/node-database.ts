@@ -4,6 +4,7 @@ import type { Database, SqlValue } from '../../src/shared/storage/database';
 
 export function openNodeDatabase(path: string): Database {
   const db = new DatabaseSync(path);
+
   return {
     async exec(sql) {
       db.exec(sql);

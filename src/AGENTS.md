@@ -1,6 +1,8 @@
 # Source rules
 
 - Keep `app/` routes thin. Put chat rules in `features/chat/`, purchase/access rules in `features/subscription/`, and local service implementations in `services/mock/`. Create these folders when their implementation exists.
+- Within a feature, use `screens/` for composition, `components/` for UI, `hooks/` for interactions, `model/` for contracts/state, `data/` for storage wiring, `providers/` for React lifecycle and `utils/` for pure formatting. Import concrete modules; avoid pass-through barrels.
+- Run `yarn format` before handing off code. It applies ESLint fixes and Prettier, matching editor save actions: grouped imports, braces and blank lines around functions and before returns.
 - Extract shared code only when it has a real consumer or isolates an external boundary. Avoid generic repository frameworks, DI containers and parallel state stores for this one-screen exercise.
 - Domain logic must be testable without rendering React. UI calls use cases; storage, transport and mock-store adapters own their side effects. Client and mock backend communicate through contracts, not each other's persistence internals.
 - Use strict TypeScript and explicit state/result types for pending, confirmed and failed outcomes. Avoid `any`, non-null assertions and casts that conceal an unhandled state; explain a necessary boundary exception locally.
