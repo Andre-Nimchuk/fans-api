@@ -27,8 +27,17 @@ export const MessageList = memo(function MessageList({
       openPaywall();
     }
   }, [canSend, thread]);
-  const { list, showLatest, scrollToLatest, onScroll, keepPosition } =
-    useMessageScroll(jumpRequest);
+  const {
+    list,
+    showLatest,
+    scrollToLatest,
+    onScroll,
+    keepPosition,
+    onScrollBeginDrag,
+    onScrollEndDrag,
+    onMomentumScrollBegin,
+    onMomentumScrollEnd,
+  } = useMessageScroll(jumpRequest, thread.loadOlder);
 
   return (
     <View className="min-h-0 flex-1">
@@ -63,18 +72,23 @@ export const MessageList = memo(function MessageList({
         contentInsetAdjustmentBehavior="never"
         maintainVisibleContentPosition={{ minIndexForVisible: 0, autoscrollToTopThreshold: 64 }}
         onScroll={onScroll}
+        onScrollBeginDrag={onScrollBeginDrag}
+        onScrollEndDrag={onScrollEndDrag}
+        onMomentumScrollBegin={onMomentumScrollBegin}
+        onMomentumScrollEnd={onMomentumScrollEnd}
+        showsVerticalScrollIndicator
         scrollEventThrottle={16}
         onLayout={keepPosition}
         onContentSizeChange={keepPosition}
-        onEndReached={() => {
-          void thread.loadOlder();
-        }}
-        onEndReachedThreshold={0.3}
         initialNumToRender={12}
         maxToRenderPerBatch={10}
         windowSize={7}
         ListFooterComponent={
-          snapshot.loadingOlder ? <ActivityIndicator className="py-4" color="#605BE8" /> : null
+          <View className="h-9 items-center justify-center">
+            {snapshot.loadingOlder ? (
+              <ActivityIndicator accessibilityLabel="Loading older messages" color="#605BE8" />
+            ) : null}
+          </View>
         }
         ListEmptyComponent={
           <Text className="py-8 text-center text-muted" style={{ transform: [{ scaleY: -1 }] }}>

@@ -1,5 +1,9 @@
 import type { ConversationId } from '@/features/chat/model/conversations';
 import type { SendMessage } from '@/features/chat/model/message';
+import type { Database, SqlValue } from '@/shared/storage/database';
+
+export const SEED_MESSAGE_COUNT = 50_000;
+const BATCH_SIZE = 100;
 
 const exchanges: Record<ConversationId, readonly string[]> = {
   ethan: [
@@ -28,14 +32,66 @@ const exchanges: Record<ConversationId, readonly string[]> = {
   ],
 };
 
-export function seedMessages(id: ConversationId): (SendMessage & { sender: 'self' | 'contact' })[] {
+function* seedMessages(
+  id: ConversationId,
+): Generator<SendMessage & { sender: 'self' | 'contact' }> {
   const text = exchanges[id];
-  const start = Date.UTC(2026, 8, 14, 9);
+  const interval = 120_000;
+  const start = Date.UTC(2026, 8, 14, 9) - (SEED_MESSAGE_COUNT - 1) * interval;
 
-  return Array.from({ length: 42 }, (_, index) => ({
-    clientId: `seed-${id}-${index}`,
-    text: text[index % text.length] ?? 'Hello!',
-    createdAt: start + index * 120_000,
-    sender: index % 2 === 0 ? 'contact' : 'self',
-  }));
+  for (let index = 0; index < SEED_MESSAGE_COUNT; index++) {
+    yield {
+      clientId: `seed-${id}-${index}`,
+      text: text[index % text.length] ?? 'Hello!',
+      createdAt: start + index * interval,
+      sender: index % 2 === 0 ? 'contact' : 'self',
+    };
+  }
+}
+
+export async function seedChatHistory(db: Database, id: ConversationId): Promise<void> {
+  await db.exec('BEGIN IMMEDIATE');
+
+  try {
+    const existing = await db.all('SELECT 1 FROM accepted_messages LIMIT 1');
+
+    // Existing conversations keep their data; Reset demo explicitly replaces the old sample set.
+    if (!existing.length) {
+      let params: SqlValue[] = [];
+
+      async function insertBatch() {
+        const placeholders = Array.from({ length: params.length / 5 }, () => '(?, ?, ?, ?, ?)');
+
+        await db.run(
+          `INSERT INTO accepted_messages (client_id, text, created_at, accepted_at, sender)
+           VALUES ${placeholders.join(', ')}`,
+          params,
+        );
+        params = [];
+      }
+
+      // REVIEW: Generate in bounded batches; one commit prevents a partial seed after a crash.
+      for (const message of seedMessages(id)) {
+        params.push(
+          message.clientId,
+          message.text,
+          message.createdAt,
+          message.createdAt,
+          message.sender,
+        );
+        if (params.length === BATCH_SIZE * 5) {
+          await insertBatch();
+        }
+      }
+
+      if (params.length) {
+        await insertBatch();
+      }
+    }
+
+    await db.exec('COMMIT');
+  } catch (error) {
+    await db.exec('ROLLBACK');
+    throw error;
+  }
 }

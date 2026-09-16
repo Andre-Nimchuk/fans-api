@@ -31,7 +31,7 @@ yarn test:watch  # Tests during development
 yarn format     # Apply formatting
 ```
 
-**31 focused tests** use real SQLite files. `tests/storage/` covers persistence and migrations, `tests/chat/` covers delivery/restart/sync, and `tests/subscription/` covers purchase/restore/access. Shared setup lives in `tests/helpers/`; scenario steps and assertions stay in each test. Node 22 reports an experimental SQLite warning.
+**35 focused tests** use real SQLite files. `tests/storage/` covers persistence and migrations, `tests/chat/` covers delivery/restart/sync and 50k seeding/pagination, and `tests/subscription/` covers purchase/restore/access. Shared setup lives in `tests/helpers/`; scenario steps and assertions stay in each test. Node 22 reports an experimental SQLite warning.
 
 Earlier iOS checks cover chat interactions and the paywall's initial layout. Full recovery/billing recordings remain pending.
 
@@ -44,7 +44,7 @@ First confirm All Access (below), then open a chat → **Mock scenarios**. Contr
 - **Go offline** → send three messages → force-quit/reopen (all three still **Waiting**) → **Add 4 incoming** → **Reconnect**: seven messages are confirmed in server order. **Sync** again adds no copies. Latest sequence numbers are visible in the panel.
 
 - **Lose next response** → send: the server saves it, but the bubble shows **Not confirmed**. **Retry** returns the original acceptance, producing one copy.
-- **Reset demo** → confirm: restore this chat's 42 sample messages, clear its queue/cache/draft and return online. An interrupted reset completes at startup.
+- **Reset demo** → confirm: restore this chat's 50,000 sample messages, clear its queue/cache/draft and return online. An interrupted reset completes at startup. Other chats and billing stay unchanged.
 
 `yarn demo:duplicate` intentionally fails with `2 !== 1`: the isolated broken client creates a new ID after a lost response. The passing regression uses the original ID. This fixture is excluded from `yarn validate`.
 
@@ -67,8 +67,14 @@ For production, replace the mock purchase adapter with StoreKit / Google Play Bi
 
 - Each conversation has separate SQLite files for its queue, received-history cache/settings and mock server history. Enqueue/accept returns only after persistence; retry with the same client ID returns the original accepted message.
 - Cache writes precede cursor advancement and queue cleanup; replay after interruption is idempotent. Reset is serialized with delivery and has a durable completion marker.
-- The mock assigns final order; pending messages retain local order. History loads in pages of 30; the inverted list anchors the latest messages and offers a return button when reading older history.
+- The mock assigns final order; pending messages retain local order. History loads in pages of 20; the inverted list anchors the latest messages and offers a return button when reading older history.
 - `src/bootstrap/` connects chat, subscription and native persistence. Features own their UI and rules. `src/features/chat/model/` separates delivery coordination (`thread-store`) from message identity/order (`thread-messages`); `data/` wires persistence, `hooks/` handles interactions, and `components/` renders UI. `src/services/mock/` owns mock acceptance, and `src/shared/storage/` owns database access. `tests/` verifies these boundaries. Styles use [NativeWind 4.2.7](https://www.nativewind.dev/docs/getting-started/installation) with shared Tailwind colors.
+
+## Performance baseline
+
+Each new chat starts with 50,000 deterministic short messages in its mock server. Existing conversations are preserved: use **Mock scenarios → Reset demo** to replace an older dataset. The client opens the latest 20 messages and reads earlier pages of 20 through an inverted FlatList. Older pages load only while scrolling toward history, at most one per drag/fling. The loading footer keeps a fixed height; the native scroll indicator reflects the loaded history. The scenario panel shows messages loaded in the session, not mounted rows; visited pages remain in memory until the session ends.
+
+For before/after profiling, use the same chat, reset dataset, build and scroll/type sequence; exclude seed creation from the recording and collapse the scenario panel. Reset clears this chat's client cache, making the starting state repeatable. Frame timing and memory have not been measured yet.
 
 ## Remaining work
 

@@ -61,7 +61,6 @@ test('paid chat gate preserves queued text on expiry and sends it after renewed 
     server,
     createId: randomUUID,
     history,
-    baseline: [],
     requireAccess: () => {
       if (!store.canSend()) {
         throw new DeliveryError('access', 'Confirm All Access to send.');

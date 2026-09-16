@@ -30,6 +30,10 @@ export function ScenarioPanel({ thread, onReset }: { thread: ChatSession; onRese
             <Text className="text-xs text-muted">
               This chat only. Offline mode and saved messages survive app restart.
             </Text>
+            <Text className="text-xs text-muted">
+              Reset demo restores 50,000 sample messages. Loaded in this session:{' '}
+              {controls.loadedCount}.
+            </Text>
             <View className="flex-row flex-wrap gap-2">
               <ScenarioAction
                 label={state.offline ? 'Reconnect' : 'Go offline'}

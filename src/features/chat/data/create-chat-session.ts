@@ -3,7 +3,6 @@ import { createChatSimulation } from '@/services/mock/chat/simulation';
 
 import type { ClientHistory } from './client-history';
 import type { Outbox } from '../model/contracts';
-import type { AcceptedMessage, SendMessage } from '../model/message';
 import { createThreadStore } from '../model/thread-store';
 
 interface ChatSessionOptions {
@@ -11,7 +10,7 @@ interface ChatSessionOptions {
   server: MockChatServer;
   createId: () => string;
   history: ClientHistory;
-  baseline?: (SendMessage & { sender: AcceptedMessage['sender'] })[];
+  seedHistory?: () => Promise<void>;
   requireAccess?: () => void;
 }
 
@@ -20,16 +19,14 @@ export async function createChatSession({
   server,
   createId,
   history,
-  baseline = [],
+  seedHistory = async () => {},
   requireAccess = () => {},
 }: ChatSessionOptions) {
   async function resetStorage() {
     // REVIEW: Durable reset intent makes a crash between the independent databases recoverable.
     await history.markReset();
     await server.reset();
-    for (const message of baseline) {
-      await server.accept(message, message.sender);
-    }
+    await seedHistory();
 
     await outbox.clear();
     await history.clear();
@@ -38,6 +35,8 @@ export async function createChatSession({
 
   if ((await history.getSettings()).resetPending) {
     await resetStorage();
+  } else {
+    await seedHistory();
   }
 
   const simulation = await createChatSimulation(outbox, server, createId, history);

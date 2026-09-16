@@ -52,7 +52,7 @@ export function useScenarioControls(thread: ChatSession, onReset: () => void) {
     Keyboard.dismiss();
     Alert.alert(
       'Reset this chat?',
-      'Delete its messages and draft, restore the sample history and go online. Other chats stay unchanged.',
+      'Delete this chat’s messages and draft, restore 50,000 sample messages and go online. Other chats stay unchanged.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -85,6 +85,7 @@ export function useScenarioControls(thread: ChatSession, onReset: () => void) {
     disabled: busy || history.resetting,
     error,
     latestOrder,
+    loadedCount: history.messages.length,
     toggleExpanded,
     toggleOffline,
     confirmReset,

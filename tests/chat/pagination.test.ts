@@ -25,11 +25,13 @@ test('thread pages older history without duplicates and keeps conversation store
     await createClientHistory(files.open('history.db')),
   );
 
-  assert.equal(thread.getSnapshot().messages.length, 30);
+  assert.equal(thread.getSnapshot().messages.length, 20);
 
   const latestId = thread.getSnapshot().messages[0]?.clientId;
 
   await Promise.all([thread.loadOlder(), thread.loadOlder()]);
+  assert.equal(thread.getSnapshot().messages.length, 40);
+  await thread.loadOlder();
   assert.equal(thread.getSnapshot().messages.length, 60);
   await thread.loadOlder();
 

@@ -59,13 +59,14 @@ test('startup completes an interrupted reset to the same baseline', async (t) =>
   await stores.close();
   stores = await open();
 
-  const baseline = [{ ...message, clientId: 'seed', sender: 'contact' as const }];
   const thread = await createChatSession({
     outbox: stores.outbox,
     server: stores.server,
     createId: randomUUID,
     history: stores.history,
-    baseline,
+    seedHistory: async () => {
+      await stores.server.accept({ ...message, clientId: 'seed' }, 'contact');
+    },
   });
 
   assert.equal(thread.simulation.getSnapshot().offline, false);

@@ -15,7 +15,7 @@ export interface ThreadSnapshot {
   error: string | null;
 }
 
-const PAGE_SIZE = 30;
+const PAGE_SIZE = 20;
 
 export async function createThreadStore(
   outbox: Outbox,

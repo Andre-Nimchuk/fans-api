@@ -10,7 +10,7 @@ import { DeliveryError } from '@/features/chat/model/delivery-error';
 import { createSubscriptionStore } from '@/features/subscription/model/subscription-store';
 import { createMockBilling } from '@/services/mock/billing/billing-service';
 import { createAcceptedMessages } from '@/services/mock/chat/accepted-messages';
-import { seedMessages } from '@/services/mock/chat/seed';
+import { seedChatHistory } from '@/services/mock/chat/seed';
 import { openDatabase } from '@/shared/storage/open-database';
 
 import type { AppRuntime } from './app-runtime';
@@ -69,12 +69,6 @@ async function initialize() {
       const outbox = await createOutbox(client);
       const server = await createAcceptedMessages(serverDb);
 
-      const baseline = seedMessages(conversation.id);
-
-      for (const message of baseline) {
-        await server.accept(message, message.sender);
-      }
-
       stores.set(
         conversation.id,
         await createChatSession({
@@ -82,7 +76,7 @@ async function initialize() {
           server,
           createId: randomUUID,
           history,
-          baseline,
+          seedHistory: () => seedChatHistory(serverDb, conversation.id),
           requireAccess,
         }),
       );
