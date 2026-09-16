@@ -5,8 +5,8 @@ import { Pressable, Text, View } from 'react-native';
 import { Icon } from '@/shared/ui/icon';
 
 import { Avatar } from './avatar';
+import { useThread } from '../hooks/use-thread';
 import type { Conversation } from '../model/conversations';
-import { useThread } from '../providers/chat-provider';
 import { formatMessageTime } from '../utils/format-time';
 
 export function ConversationRow({ conversation }: { conversation: Conversation }) {

@@ -1,6 +1,6 @@
 export class DeliveryError extends Error {
   constructor(
-    public readonly outcome: 'offline' | 'unknown',
+    public readonly outcome: 'offline' | 'unknown' | 'access',
     message: string,
   ) {
     super(message);

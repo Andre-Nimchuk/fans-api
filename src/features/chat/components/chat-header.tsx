@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import { Keyboard, Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { openPaywall, useSubscription } from '@/features/subscription/hooks/use-subscription';
 import { Icon } from '@/shared/ui/icon';
 
 import { Avatar } from './avatar';
@@ -9,6 +10,7 @@ import type { Conversation } from '../model/conversations';
 
 export function ChatHeader({ conversation }: { conversation: Conversation }) {
   const insets = useSafeAreaInsets();
+  const { canSend, state } = useSubscription();
 
   return (
     <View className="border-b border-line bg-white" style={{ paddingTop: insets.top }}>
@@ -39,6 +41,16 @@ export function ChatHeader({ conversation }: { conversation: Conversation }) {
           </Text>
           <Text className="mt-0.5 text-xs text-brand">{conversation.handle}</Text>
         </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Manage All Access"
+          onPress={openPaywall}
+          className="min-h-11 max-w-[45%] justify-center rounded-xl bg-selected px-3"
+        >
+          <Text className="text-center text-xs font-semibold text-brand">
+            {canSend ? 'All Access active' : state.pending ? 'Access pending' : 'Get All Access'}
+          </Text>
+        </Pressable>
       </View>
     </View>
   );

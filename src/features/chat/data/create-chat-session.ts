@@ -6,13 +6,23 @@ import type { Outbox } from '../model/contracts';
 import type { AcceptedMessage, SendMessage } from '../model/message';
 import { createThreadStore } from '../model/thread-store';
 
-export async function createChatSession(
-  outbox: Outbox,
-  server: MockChatServer,
-  createId: () => string,
-  history: ClientHistory,
-  baseline: (SendMessage & { sender: AcceptedMessage['sender'] })[] = [],
-) {
+interface ChatSessionOptions {
+  outbox: Outbox;
+  server: MockChatServer;
+  createId: () => string;
+  history: ClientHistory;
+  baseline?: (SendMessage & { sender: AcceptedMessage['sender'] })[];
+  requireAccess?: () => void;
+}
+
+export async function createChatSession({
+  outbox,
+  server,
+  createId,
+  history,
+  baseline = [],
+  requireAccess = () => {},
+}: ChatSessionOptions) {
   async function resetStorage() {
     // REVIEW: Durable reset intent makes a crash between the independent databases recoverable.
     await history.markReset();
@@ -36,6 +46,7 @@ export async function createChatSession(
     simulation.transport,
     history,
     simulation.isOnline,
+    requireAccess,
   );
 
   return {

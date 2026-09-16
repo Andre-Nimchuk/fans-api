@@ -22,6 +22,7 @@ export async function createThreadStore(
   server: ChatService,
   history: MessageHistory,
   isOnline = () => true,
+  requireAccess: () => void = () => {},
 ) {
   const messages = createThreadMessages();
   const listeners = new Set<() => void>();
@@ -103,6 +104,8 @@ export async function createThreadStore(
       let accepted = false;
 
       try {
+        requireAccess();
+
         const result = await server.accept(message);
 
         accepted = true;
@@ -126,9 +129,11 @@ export async function createThreadStore(
 
         messages.setFailure(message.clientId, failure);
         error =
-          failure === 'unknown'
-            ? 'Delivery not confirmed. Retry safely; the same message will not be added twice.'
-            : 'Message saved on this device. Tap Retry to send it.';
+          reason instanceof DeliveryError && reason.outcome === 'access'
+            ? reason.message
+            : failure === 'unknown'
+              ? 'Delivery not confirmed. Retry safely; the same message will not be added twice.'
+              : 'Message saved on this device. Tap Retry to send it.';
         publish();
         break;
       }
@@ -210,6 +215,9 @@ export async function createThreadStore(
         if (resetting || resetRequired) {
           throw new Error('Demo is resetting.');
         }
+
+        // REVIEW: Gate both new enqueue and queued delivery; expiry never deletes saved text.
+        requireAccess();
 
         const saved = await outbox.enqueue(message);
 

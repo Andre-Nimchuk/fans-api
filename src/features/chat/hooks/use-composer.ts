@@ -2,10 +2,12 @@ import { randomUUID } from 'expo-crypto';
 import { useRef, useState } from 'react';
 import type { TextInput } from 'react-native';
 
+import { useAppRuntime } from '@/bootstrap/app-provider';
+
 import type { ConversationId } from '../model/conversations';
+import { DeliveryError } from '../model/delivery-error';
 import type { SendMessage } from '../model/message';
 import type { ThreadStore } from '../model/thread-store';
-import { useChatContext } from '../providers/chat-provider';
 
 interface UseComposerOptions {
   id: ConversationId;
@@ -14,7 +16,7 @@ interface UseComposerOptions {
 }
 
 export function useComposer({ id, thread, onSent }: UseComposerOptions) {
-  const { drafts } = useChatContext();
+  const { drafts } = useAppRuntime();
   const [text, setText] = useState(drafts.get(id) ?? '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>();
@@ -55,8 +57,12 @@ export function useComposer({ id, thread, onSent }: UseComposerOptions) {
       attempt.current = null;
       onSent();
       input.current?.focus();
-    } catch {
-      setError('Could not save your message. Your text is still here — try again.');
+    } catch (reason) {
+      setError(
+        reason instanceof DeliveryError && reason.outcome === 'access'
+          ? reason.message
+          : 'Could not save your message. Your text is still here — try again.',
+      );
     } finally {
       savingRef.current = false;
       setSaving(false);

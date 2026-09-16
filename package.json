@@ -48,8 +48,8 @@
     "format": "yarn lint:fix && prettier . --write",
     "format:check": "prettier . --check",
     "validate": "yarn typecheck && yarn lint && yarn format:check && yarn test",
-    "test": "node --import tsx --test tests/*.test.ts",
-    "test:watch": "node --import tsx --test --watch tests/*.test.ts",
+    "test": "node --import tsx --test tests/*/*.test.ts",
+    "test:watch": "node --import tsx --test --watch tests/*/*.test.ts",
     "demo:duplicate": "node --import tsx --test tests/fixtures/lost-response.red.ts"
   },
   "private": true,

@@ -1,6 +1,7 @@
-import { memo, useSyncExternalStore } from 'react';
+import { memo, useCallback, useSyncExternalStore } from 'react';
 import { ActivityIndicator, FlatList, Platform, Pressable, Text, View } from 'react-native';
 
+import { openPaywall, useSubscription } from '@/features/subscription/hooks/use-subscription';
 import { Icon } from '@/shared/ui/icon';
 
 import { MessageBubble } from './message-bubble';
@@ -18,6 +19,14 @@ export const MessageList = memo(function MessageList({
   jumpRequest: number;
 }) {
   const snapshot = useSyncExternalStore(thread.subscribe, thread.getSnapshot, thread.getSnapshot);
+  const { canSend } = useSubscription();
+  const retry = useCallback(async () => {
+    if (canSend) {
+      await thread.retry();
+    } else {
+      openPaywall();
+    }
+  }, [canSend, thread]);
   const { list, showLatest, scrollToLatest, onScroll, keepPosition } =
     useMessageScroll(jumpRequest);
 
@@ -39,7 +48,8 @@ export const MessageList = memo(function MessageList({
           <MessageBubble
             message={item}
             conversation={conversation}
-            retry={thread.retry}
+            retry={retry}
+            accessRequired={!canSend}
             showDay={
               new Date(item.createdAt).toDateString() !==
               new Date(snapshot.messages[index + 1]?.createdAt ?? 0).toDateString()

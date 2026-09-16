@@ -3,18 +3,25 @@ import '../../global.css';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
+import { useReducedMotion } from 'react-native-reanimated';
 
-import { ChatProvider } from '@/features/chat/providers/chat-provider';
+import { AppProvider } from '@/bootstrap/app-provider';
 
 export default function RootLayout() {
+  const reducedMotion = useReducedMotion();
+
   return (
     <KeyboardProvider>
-      <ChatProvider>
+      <AppProvider>
         <Stack
-          screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#FFFFFF' } }}
+          screenOptions={{
+            headerShown: false,
+            animation: reducedMotion ? 'none' : 'default',
+            contentStyle: { backgroundColor: '#FFFFFF' },
+          }}
         />
         <StatusBar style="dark" />
-      </ChatProvider>
+      </AppProvider>
     </KeyboardProvider>
   );
 }

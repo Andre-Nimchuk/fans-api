@@ -2,18 +2,19 @@ import { createContext, useContext, useEffect, useState } from 'react';
 import type { PropsWithChildren } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 
-import type { ChatSession } from '../data/create-chat-session';
-import { openThreads } from '../data/open-threads';
-import type { ConversationId } from '../model/conversations';
+import type { ConversationId } from '@/features/chat/model/conversations';
+import { useSubscriptionLifecycle } from '@/features/subscription/hooks/use-subscription-lifecycle';
 
-interface ChatContextValue {
-  threads: Map<ConversationId, ChatSession>;
+import type { AppRuntime } from './app-runtime';
+import { openAppRuntime } from './open-app-runtime';
+
+interface AppContextValue extends AppRuntime {
   drafts: Map<ConversationId, string>;
 }
-const ChatContext = createContext<ChatContextValue | null>(null);
+const AppContext = createContext<AppContextValue | null>(null);
 
-export function ChatProvider({ children }: PropsWithChildren) {
-  const [threads, setThreads] = useState<ChatContextValue['threads']>();
+export function AppProvider({ children }: PropsWithChildren) {
+  const [runtime, setRuntime] = useState<AppRuntime>();
   const [error, setError] = useState<string>();
   const [attempt, setAttempt] = useState(0);
   const [drafts] = useState(() => new Map<ConversationId, string>());
@@ -21,10 +22,10 @@ export function ChatProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     let active = true;
 
-    openThreads().then(
+    openAppRuntime().then(
       (value) => {
         if (active) {
-          setThreads(value);
+          setRuntime(value);
         }
       },
       (reason: unknown) => {
@@ -39,7 +40,9 @@ export function ChatProvider({ children }: PropsWithChildren) {
     };
   }, [attempt]);
 
-  if (!threads) {
+  useSubscriptionLifecycle(runtime?.subscription);
+
+  if (!runtime) {
     return (
       <View className="flex-1 items-center justify-center bg-white px-8">
         {error ? (
@@ -65,25 +68,15 @@ export function ChatProvider({ children }: PropsWithChildren) {
     );
   }
 
-  return <ChatContext.Provider value={{ threads, drafts }}>{children}</ChatContext.Provider>;
+  return <AppContext.Provider value={{ ...runtime, drafts }}>{children}</AppContext.Provider>;
 }
 
-export function useChatContext() {
-  const context = useContext(ChatContext);
+export function useAppRuntime() {
+  const context = useContext(AppContext);
 
   if (!context) {
-    throw new Error('ChatProvider is missing.');
+    throw new Error('AppProvider is missing.');
   }
 
   return context;
-}
-
-export function useThread(id: ConversationId) {
-  const thread = useChatContext().threads.get(id);
-
-  if (!thread) {
-    throw new Error('Unknown conversation.');
-  }
-
-  return thread;
 }

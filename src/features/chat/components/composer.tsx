@@ -10,6 +10,7 @@ import { useReanimatedKeyboardAnimation } from 'react-native-keyboard-controller
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { openPaywall, useSubscription } from '@/features/subscription/hooks/use-subscription';
 import { Icon } from '@/shared/ui/icon';
 
 import { useComposer } from '../hooks/use-composer';
@@ -24,6 +25,7 @@ interface ComposerProps {
 }
 
 export function Composer({ id, thread, onSent, disabled = false }: ComposerProps) {
+  const { canSend } = useSubscription();
   const { text, input, saving, error, changeText, send } = useComposer({
     id,
     thread,
@@ -46,6 +48,17 @@ export function Composer({ id, thread, onSent, disabled = false }: ComposerProps
       className="rounded-t-3xl border-t border-line bg-white px-4 pt-3"
       style={bottomSpacing}
     >
+      {!canSend ? (
+        <Pressable
+          accessibilityRole="button"
+          onPress={openPaywall}
+          className="min-h-11 justify-center pb-2"
+        >
+          <Text className="text-sm text-brand">
+            Confirm All Access to send. Your draft stays here.
+          </Text>
+        </Pressable>
+      ) : null}
       {error ? (
         <Text accessibilityRole="alert" className="mb-2 text-sm text-red-700">
           {error}
@@ -84,11 +97,15 @@ export function Composer({ id, thread, onSent, disabled = false }: ComposerProps
         <Pressable
           testID="send-message"
           accessibilityRole="button"
-          accessibilityLabel="Send message"
+          accessibilityLabel={canSend ? 'Send message' : 'View All Access to send'}
           accessibilityState={{ disabled: !text.trim() || saving || disabled, busy: saving }}
           disabled={!text.trim() || saving || disabled}
           onPress={() => {
-            void send();
+            if (canSend) {
+              void send();
+            } else {
+              openPaywall();
+            }
           }}
           className={`h-12 w-12 items-center justify-center rounded-2xl ${!text.trim() || saving || disabled ? 'bg-brand/40' : 'bg-brand active:opacity-80'}`}
         >
