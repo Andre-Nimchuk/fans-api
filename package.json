@@ -50,6 +50,7 @@
     "validate": "yarn typecheck && yarn lint && yarn format:check && yarn test",
     "test": "node --import tsx --test tests/*/*.test.ts",
     "test:watch": "node --import tsx --test --watch tests/*/*.test.ts",
+    "test:lost-response": "node --import tsx --test tests/chat/lost-response.test.ts",
     "demo:duplicate": "node --import tsx --test tests/fixtures/lost-response.red.ts"
   },
   "private": true,

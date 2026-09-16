@@ -46,7 +46,7 @@ First confirm All Access (below), then open a chat → **Mock scenarios**. Contr
 - **Lose next response** → send: the server saves it, but the bubble shows **Not confirmed**. **Retry** returns the original acceptance, producing one copy.
 - **Reset demo** → confirm: restore this chat's 50,000 sample messages, clear its queue/cache/draft and return online. An interrupted reset completes at startup. Other chats and billing stay unchanged.
 
-`yarn demo:duplicate` intentionally fails with `2 !== 1`: the isolated broken client creates a new ID after a lost response. The passing regression uses the original ID. This fixture is excluded from `yarn validate`.
+`yarn demo:duplicate` intentionally fails with `2 !== 1`: the isolated broken client creates a new ID after a lost response. Run `yarn test:lost-response` for the passing regression checks using a stable client ID. The broken fixture is excluded from `yarn validate`.
 
 Faults fire once; tap an armed fault again to cancel it. This is simulated connectivity, independent of airplane mode.
 

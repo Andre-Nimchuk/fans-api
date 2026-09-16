@@ -30,8 +30,11 @@ export function useMessageScroll(jumpRequest: number, loadOlder: () => Promise<v
       const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
       const nearBottom = contentOffset.y < 64;
 
-      atBottom.current = nearBottom;
-      setShowLatest(!nearBottom);
+      if (atBottom.current !== nearBottom) {
+        atBottom.current = nearBottom;
+        setShowLatest(!nearBottom);
+      }
+
       if (
         pagination.current.shouldLoad(
           contentOffset.y,
@@ -44,19 +47,21 @@ export function useMessageScroll(jumpRequest: number, loadOlder: () => Promise<v
     [loadOlder],
   );
 
-  function onScrollBeginDrag(event: NativeSyntheticEvent<NativeScrollEvent>) {
+  const onScrollBeginDrag = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     pagination.current.beginDrag(event.nativeEvent.contentOffset.y);
-  }
+  }, []);
+  const onScrollEnd = useCallback(() => pagination.current.endScroll(), []);
+  const onMomentumScrollBegin = useCallback(() => pagination.current.beginMomentum(), []);
 
   // Layout/content callbacks also cover keyboard and composer resizing without scrolling a reader away.
-  function keepPosition() {
+  const keepPosition = useCallback(() => {
     if (lastJump.current !== jumpRequest) {
       lastJump.current = jumpRequest;
       scrollToLatest();
     } else if (atBottom.current) {
       list.current?.scrollToOffset({ offset: 0, animated: false });
     }
-  }
+  }, [jumpRequest, scrollToLatest]);
 
   return {
     list,
@@ -65,8 +70,8 @@ export function useMessageScroll(jumpRequest: number, loadOlder: () => Promise<v
     onScroll,
     keepPosition,
     onScrollBeginDrag,
-    onScrollEndDrag: () => pagination.current.endScroll(),
-    onMomentumScrollBegin: () => pagination.current.beginMomentum(),
-    onMomentumScrollEnd: () => pagination.current.endScroll(),
+    onScrollEndDrag: onScrollEnd,
+    onMomentumScrollBegin,
+    onMomentumScrollEnd: onScrollEnd,
   };
 }

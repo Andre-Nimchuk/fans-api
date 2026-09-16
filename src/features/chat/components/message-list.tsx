@@ -1,13 +1,35 @@
-import { memo, useCallback, useSyncExternalStore } from 'react';
-import { ActivityIndicator, FlatList, Platform, Pressable, Text, View } from 'react-native';
+import { memo, useCallback, useMemo, useSyncExternalStore } from 'react';
+import { FlatList, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import type { ListRenderItem } from 'react-native';
 
 import { openPaywall, useSubscription } from '@/features/subscription/hooks/use-subscription';
 import { Icon } from '@/shared/ui/icon';
 
 import { MessageBubble } from './message-bubble';
+import { MessageHistoryLoader, MessageListError } from './message-list-status';
 import { useMessageScroll } from '../hooks/use-message-scroll';
 import type { Conversation } from '../model/conversations';
+import type { ThreadMessage } from '../model/thread-messages';
 import type { ThreadStore } from '../model/thread-store';
+
+const visiblePosition = { minIndexForVisible: 0, autoscrollToTopThreshold: 64 };
+const styles = StyleSheet.create({
+  list: { flex: 1 },
+  content: { paddingTop: 12, paddingBottom: 12, flexGrow: 1 },
+  empty: { transform: [{ scaleY: -1 }] },
+});
+
+function messageKey(message: ThreadMessage) {
+  return message.clientId;
+}
+
+function EmptyHistory() {
+  return (
+    <Text className="py-8 text-center text-muted" style={styles.empty}>
+      Start your conversation.
+    </Text>
+  );
+}
 
 export const MessageList = memo(function MessageList({
   conversation,
@@ -18,7 +40,9 @@ export const MessageList = memo(function MessageList({
   thread: ThreadStore;
   jumpRequest: number;
 }) {
-  const snapshot = useSyncExternalStore(thread.subscribe, thread.getSnapshot, thread.getSnapshot);
+  // REVIEW: Loading/error updates have their own subscribers; unchanged history keeps its identity.
+  const getMessages = useCallback(() => thread.getSnapshot().messages, [thread]);
+  const messages = useSyncExternalStore(thread.subscribe, getMessages, getMessages);
   const { canSend } = useSubscription();
   const retry = useCallback(async () => {
     if (canSend) {
@@ -27,6 +51,22 @@ export const MessageList = memo(function MessageList({
       openPaywall();
     }
   }, [canSend, thread]);
+  const renderMessage = useCallback<ListRenderItem<ThreadMessage>>(
+    ({ item, index }) => (
+      <MessageBubble
+        message={item}
+        conversation={conversation}
+        retry={retry}
+        accessRequired={!canSend}
+        showDay={
+          new Date(item.createdAt).toDateString() !==
+          new Date(messages[index + 1]?.createdAt ?? 0).toDateString()
+        }
+      />
+    ),
+    [messages, conversation, retry, canSend],
+  );
+  const historyLoader = useMemo(() => <MessageHistoryLoader thread={thread} />, [thread]);
   const {
     list,
     showLatest,
@@ -41,36 +81,21 @@ export const MessageList = memo(function MessageList({
 
   return (
     <View className="min-h-0 flex-1">
-      {snapshot.error ? (
-        <Text accessibilityRole="alert" className="bg-outgoing px-5 py-2 text-sm text-ink">
-          {snapshot.error}
-        </Text>
-      ) : null}
+      <MessageListError thread={thread} />
       <FlatList
         ref={list}
         testID="message-list"
-        className="flex-1"
+        style={styles.list}
         inverted
-        data={snapshot.messages}
-        keyExtractor={(item) => item.clientId}
-        renderItem={({ item, index }) => (
-          <MessageBubble
-            message={item}
-            conversation={conversation}
-            retry={retry}
-            accessRequired={!canSend}
-            showDay={
-              new Date(item.createdAt).toDateString() !==
-              new Date(snapshot.messages[index + 1]?.createdAt ?? 0).toDateString()
-            }
-          />
-        )}
-        contentContainerStyle={{ paddingTop: 12, paddingBottom: 12, flexGrow: 1 }}
+        data={messages}
+        keyExtractor={messageKey}
+        renderItem={renderMessage}
+        contentContainerStyle={styles.content}
         keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
         keyboardShouldPersistTaps="handled"
         automaticallyAdjustContentInsets={false}
         contentInsetAdjustmentBehavior="never"
-        maintainVisibleContentPosition={{ minIndexForVisible: 0, autoscrollToTopThreshold: 64 }}
+        maintainVisibleContentPosition={visiblePosition}
         onScroll={onScroll}
         onScrollBeginDrag={onScrollBeginDrag}
         onScrollEndDrag={onScrollEndDrag}
@@ -83,18 +108,8 @@ export const MessageList = memo(function MessageList({
         initialNumToRender={12}
         maxToRenderPerBatch={10}
         windowSize={7}
-        ListFooterComponent={
-          <View className="h-9 items-center justify-center">
-            {snapshot.loadingOlder ? (
-              <ActivityIndicator accessibilityLabel="Loading older messages" color="#605BE8" />
-            ) : null}
-          </View>
-        }
-        ListEmptyComponent={
-          <Text className="py-8 text-center text-muted" style={{ transform: [{ scaleY: -1 }] }}>
-            Start your conversation.
-          </Text>
-        }
+        ListFooterComponent={historyLoader}
+        ListEmptyComponent={EmptyHistory}
       />
       {showLatest ? (
         <Pressable

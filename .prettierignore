@@ -12,3 +12,6 @@ yarn.lock
 AGENTS.md
 CLAUDE.md
 **/AGENTS.md
+# Keep exported profiler evidence byte-for-byte unchanged.
+bottleneck/*.json
+bottleneck/*.json.gz

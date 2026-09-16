@@ -1,3 +1,4 @@
+import { useCallback, useSyncExternalStore } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -21,10 +22,11 @@ interface ComposerProps {
   id: ConversationId;
   thread: ThreadStore;
   onSent: () => void;
-  disabled?: boolean;
 }
 
-export function Composer({ id, thread, onSent, disabled = false }: ComposerProps) {
+export function Composer({ id, thread, onSent }: ComposerProps) {
+  const getResetting = useCallback(() => thread.getSnapshot().resetting, [thread]);
+  const disabled = useSyncExternalStore(thread.subscribe, getResetting, getResetting);
   const { canSend } = useSubscription();
   const { text, input, saving, error, changeText, send } = useComposer({
     id,
